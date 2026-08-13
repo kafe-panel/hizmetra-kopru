@@ -1,0 +1,49 @@
+version: 2
+project_name: hizmetra-kopru
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: windows
+    main: ./cmd/hizmetra-kopru
+    binary: hizmetra-kopru
+    env:
+      - CGO_ENABLED=0
+    goos: [windows]
+    goarch: [amd64]
+    # -H windowsgui: konsol penceresi AÇILMAZ (tepside sessiz çalışır)
+    # -s -w: sembol tablosunu at → exe küçülür
+    ldflags:
+      - -H windowsgui -s -w -X main.Surum={{.Version}}
+
+archives:
+  # Çıplak .exe de yayınlansın: kafe kullanıcısı zip açmakla uğraşmasın
+  # (kurulum 3 dakikada bitsin diye — README'deki 1. adım doğrudan bu dosya).
+  - id: cikti
+    formats: [binary]
+    name_template: "hizmetra-kopru"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  draft: false
+  name_template: "Hizmetra Köprü {{.Version}}"
+  header: |
+    ## Kurulum
+
+    1. Aşağıdan **hizmetra-kopru.exe** dosyasını indirin
+    2. Çift tıklayın (Windows uyarırsa: **Ek bilgi → Yine de çalıştır**)
+    3. Paneldeki **6 haneli kurulum kodunu** girin
+
+    Ayrıntı için [README](https://github.com/kafe-panel/hizmetra-kopru#kurulum-3-dakika).
