@@ -108,7 +108,9 @@ func ilkKurulum() bool {
 		}
 
 		makineAdi, _ := os.Hostname()
-		cevap, err := istemci.Eslestir(kod, makineAdi, makineAdi, Surum, runtime.GOOS)
+		// TEK exe hem staging hem production'a bağlanabilsin diye kodu bilinen
+		// sunucuların HEPSİNDE dene; KABUL eden (token dönen) sunucuyu kullan.
+		cevap, sunucu, err := eslestirmeDene(kod, makineAdi)
 		if err != nil {
 			gunluk.Yaz("eşleştirme başarısız: %v", err)
 			mesaj := "Kod geçersiz veya süresi dolmuş.\nPanelden yeni kod alıp tekrar deneyin."
@@ -122,10 +124,13 @@ func ilkKurulum() bool {
 			continue
 		}
 
+		// Kazanan sunucuya kilitlen: nabız/işler bundan sonra hep oraya gider.
+		istemci = api.New(sunucu)
+		istemci.Token = cevap.Token
 		yapilandirma.Token = cevap.Token
 		yapilandirma.IsletmeAd = cevap.IsletmeAd
 		yapilandirma.CihazAd = makineAdi
-		yapilandirma.SunucuURL = yapilandirma.SunucuAdresi()
+		yapilandirma.SunucuURL = sunucu
 		if err := ayar.Kaydet(yapilandirma); err != nil {
 			gunluk.Yaz("ayar kaydedilemedi: %v", err)
 		}
@@ -140,6 +145,27 @@ func ilkKurulum() bool {
 			zenity.Title("Hizmetra Köprü — Kurulum tamam"))
 		return true
 	}
+}
+
+// eslestirmeDene — kurulum kodunu bilinen sunucularda (ayar.SunucuAdaylari)
+// SIRAYLA dener; KABUL eden (token dönen) sunucu ile cevabı döner. Böylece aynı
+// exe hem staging hem production kodlarıyla çalışır — kod hangi panelde
+// üretildiyse ajan o sunucuyu bulur. Hiçbiri kabul etmezse en açıklayıcı hatayı
+// döner (ulaşılamama > kod-geçersiz).
+func eslestirmeDene(kod, makineAdi string) (*api.EslestirCevap, string, error) {
+	var sonHata error = api.ErrKodGecersiz
+	for _, sunucu := range yapilandirma.SunucuAdaylari() {
+		cevap, err := api.New(sunucu).Eslestir(kod, makineAdi, makineAdi, Surum, runtime.GOOS)
+		if err == nil {
+			gunluk.Yaz("eşleşme sunucusu: %s", sunucu)
+			return cevap, sunucu, nil
+		}
+		gunluk.Yaz("eşleştirme denendi %s: %v", sunucu, err)
+		if err != api.ErrKodGecersiz {
+			sonHata = err // ulaşılamama gibi hatayı sakla; yine de diğer sunucuyu dene
+		}
+	}
+	return nil, "", sonHata
 }
 
 func surumKontrolDongusu() {

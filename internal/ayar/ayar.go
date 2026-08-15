@@ -23,6 +23,15 @@ type Ayar struct {
 // VarsayilanSunucu — panel API kökü. HIZMETRA_API env'i ezer (geliştirme).
 const VarsayilanSunucu = "https://api.hizmetra.com"
 
+// BilinenSunucular — ilk kurulumda (env/kayıt yoksa) SIRAYLA denenir; kurulum
+// kodunu KABUL eden sunucu kullanılır. Böylece TEK exe hem production hem
+// staging'e bağlanır: staging'de üretilen kod staging'i, production'da üretilen
+// kod production'ı otomatik bulur. Ortam değişkeni / .bat GEREKMEZ.
+var BilinenSunucular = []string{
+	"https://api.hizmetra.com",           // production (canlı kafeler)
+	"https://staging-panel.hizmetra.com", // staging (test)
+}
+
 // Dizin — ayar/log dizini; yoksa oluşturur.
 func Dizin() (string, error) {
 	kok, err := os.UserConfigDir() // Windows: %APPDATA%; yoksa hata
@@ -91,4 +100,20 @@ func (a *Ayar) SunucuAdresi() string {
 		return a.SunucuURL
 	}
 	return VarsayilanSunucu
+}
+
+// SunucuAdaylari — eşleştirmede DENENECEK sunucular, öncelik sırasıyla:
+//   - env HIZMETRA_API varsa YALNIZ onu (açık geçersiz kılma),
+//   - kayıtlı SunucuURL varsa YALNIZ onu (zaten bir sunucuya eşleşmiş),
+//   - yoksa BilinenSunucular (production→staging otomatik keşif).
+// Eşleşme başarınca kazanan sunucu SunucuURL'e yazılır; sonraki tüm
+// nabız/işler tek sunucuya gider.
+func (a *Ayar) SunucuAdaylari() []string {
+	if v := os.Getenv("HIZMETRA_API"); v != "" {
+		return []string{v}
+	}
+	if a.SunucuURL != "" {
+		return []string{a.SunucuURL}
+	}
+	return BilinenSunucular
 }
