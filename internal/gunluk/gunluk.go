@@ -16,13 +16,53 @@ import (
 )
 
 const maksBoyut = 2 << 20 // 2MB → devret
+const halkaBoyut = 200    // durum penceresi fiş şeridi için bellekte tutulan son satır sayısı
 
 var (
-	kilit  sync.Mutex
+	kilit   sync.Mutex
 	kayitci *log.Logger
-	dosya  *os.File
-	yolu   string
+	dosya   *os.File
+	yolu    string
 )
+
+// Durum penceresinin "fiş şeridi" son N satırı bellekte okur (dosyayı açmadan).
+// Ayrı kilit: Yaz'ın dosya kilidini bloklamaz. PII yok — fiş İÇERİĞİ zaten
+// hiçbir zaman loglanmaz (yalnız is_id/hedef/bayt sayısı), o kural burada da geçerli.
+var (
+	halkaKilit sync.Mutex
+	halka      [halkaBoyut]string
+	halkaBas   int // bir sonraki yazılacak indeks
+	halkaDolu  int // yazılmış satır sayısı (≤ halkaBoyut)
+)
+
+func halkayaYaz(satir string) {
+	halkaKilit.Lock()
+	halka[halkaBas] = satir
+	halkaBas = (halkaBas + 1) % halkaBoyut
+	if halkaDolu < halkaBoyut {
+		halkaDolu++
+	}
+	halkaKilit.Unlock()
+}
+
+// SonSatirlar — bellekteki son n günlük satırını ESKİDEN YENİYE döndürür
+// (fiş şeridi altta en yeni satırı gösterir). n dolu satırdan büyükse kırpılır.
+func SonSatirlar(n int) []string {
+	halkaKilit.Lock()
+	defer halkaKilit.Unlock()
+	if n > halkaDolu {
+		n = halkaDolu
+	}
+	if n <= 0 {
+		return nil
+	}
+	bas := (halkaBas - n + halkaBoyut) % halkaBoyut
+	out := make([]string, n)
+	for i := 0; i < n; i++ {
+		out[i] = halka[(bas+i)%halkaBoyut]
+	}
+	return out
+}
 
 // Baslat — günlüğü dizinde açar. Hata olursa yalnız stderr'e yazılır.
 func Baslat(dizin string) {
@@ -56,15 +96,18 @@ func devret() {
 	ac()
 }
 
-// Yaz — biçimli günlük satırı.
+// Yaz — biçimli günlük satırı. Dosyaya (tam damga) ve bellek halkasına
+// (durum penceresi için HH:MM:SS damgalı) yazar.
 func Yaz(bicim string, arg ...any) {
+	mesaj := fmt.Sprintf(bicim, arg...)
 	kilit.Lock()
-	defer kilit.Unlock()
 	if kayitci == nil {
 		kayitci = log.New(os.Stderr, "", log.LstdFlags)
 	}
 	devret()
-	kayitci.Output(2, fmt.Sprintf(bicim, arg...)) //nolint:errcheck
+	kayitci.Output(2, mesaj) //nolint:errcheck
+	kilit.Unlock()
+	halkayaYaz(time.Now().Format("15:04:05") + "  " + mesaj)
 }
 
 // Yolu — günlük dosyasının tam yolu (tray "Günlüğü Aç" için).

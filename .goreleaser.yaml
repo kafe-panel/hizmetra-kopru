@@ -4,6 +4,9 @@ project_name: hizmetra-kopru
 before:
   hooks:
     - go mod tidy
+    # NOT: exe ikonu + VERSIONINFO'yu taşıyan cmd/hizmetra-kopru/rsrc_windows_amd64.syso,
+    # goreleaser çalışmadan ÖNCE release workflow'undaki "go-winres" adımında üretilir
+    # (böylece sürüm etiketten gelir). go build onu main paketinden otomatik linkler.
 
 builds:
   - id: windows

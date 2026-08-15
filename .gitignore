@@ -2,3 +2,7 @@ dist/
 *.exe
 *.log
 .DS_Store
+
+# go-winres çıktısı — exe ikonu + VERSIONINFO; CI'da build öncesi üretilir
+# (assets/hizmetra.ico + winres.json kaynaktır, .syso türetilmiştir).
+*.syso

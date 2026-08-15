@@ -18,6 +18,17 @@ jobs:
         with:
           go-version: "1.22"
       - run: go test ./...
+      # Exe ikonu (assets/hizmetra.ico) + VERSIONINFO — build ÖNCESİ .syso üret.
+      # go build, main paketindeki .syso'yu otomatik linkler; sürüm etiketten gelir.
+      - name: Exe ikonu + surum bilgisi (go-winres)
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          go run github.com/tc-hib/go-winres@latest make \
+            --in cmd/hizmetra-kopru/winres/winres.json \
+            --arch amd64 \
+            --out cmd/hizmetra-kopru/rsrc \
+            --product-version "$VER" \
+            --file-version "$VER"
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"

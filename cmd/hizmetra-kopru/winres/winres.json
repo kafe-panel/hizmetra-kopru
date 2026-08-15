@@ -1,0 +1,55 @@
+{
+  "RT_GROUP_ICON": {
+    "APP": {
+      "0000": "../../../assets/hizmetra.ico"
+    }
+  },
+  "RT_MANIFEST": {
+    "#1": {
+      "0409": {
+        "identity": {
+          "name": "Hizmetra.Kopru",
+          "version": "0.2.0.0"
+        },
+        "description": "Hizmetra Köprü — fiş yazıcı köprüsü",
+        "minimum-os": "win7",
+        "execution-level": "as invoker",
+        "ui-access": false,
+        "auto-elevate": false,
+        "dpi-awareness": "system",
+        "disable-theming": false,
+        "disable-window-filtering": false,
+        "high-resolution-scrolling-aware": false,
+        "long-path-aware": false,
+        "printer-driver-isolation": false,
+        "ultra-high-resolution-scrolling-aware": false,
+        "gdi-scaling": false,
+        "segment-heap": false,
+        "use-common-controls-v6": false
+      }
+    }
+  },
+  "RT_VERSION": {
+    "#1": {
+      "0000": {
+        "fixed": {
+          "file_version": "0.2.0.0",
+          "product_version": "0.2.0.0"
+        },
+        "info": {
+          "0409": {
+            "Comments": "Panelden gelen fişleri yerel yazıcılara basar. Giden HTTPS; router ayarı gerekmez.",
+            "CompanyName": "Hizmetra",
+            "FileDescription": "Hizmetra Köprü — fiş yazıcı köprüsü",
+            "FileVersion": "0.2.0.0",
+            "InternalName": "hizmetra-kopru",
+            "LegalCopyright": "© Hizmetra",
+            "OriginalFilename": "hizmetra-kopru.exe",
+            "ProductName": "Hizmetra Köprü",
+            "ProductVersion": "0.2.0"
+          }
+        }
+      }
+    }
+  }
+}

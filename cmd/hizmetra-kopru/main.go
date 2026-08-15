@@ -21,6 +21,7 @@ import (
 
 	"github.com/kafe-panel/hizmetra-kopru/internal/api"
 	"github.com/kafe-panel/hizmetra-kopru/internal/ayar"
+	durumsrv "github.com/kafe-panel/hizmetra-kopru/internal/durum" // paket adı 'durum' — global 'durum' değişkeniyle çakışmasın
 	"github.com/kafe-panel/hizmetra-kopru/internal/gunluk"
 	"github.com/kafe-panel/hizmetra-kopru/internal/kesif"
 	"github.com/kafe-panel/hizmetra-kopru/internal/kopru"
@@ -35,6 +36,7 @@ var (
 	istemci      *api.Client
 	ajan         *kopru.Ajan
 	durum        = &kopru.Durum{}
+	durumURL     string // durum penceresinin yerel adresi (token'lı) — LOGLANMAZ
 	dur          = make(chan struct{})
 )
 
@@ -62,6 +64,10 @@ func main() {
 	}
 	istemci = api.New(yapilandirma.SunucuAdresi())
 	istemci.Token = yapilandirma.Token
+
+	// Durum penceresi sunucusunu ERKEN başlat: kurulum bitince "Tamam"dan sonra
+	// otomatik açılabilsin (ozet globalleri canlı okur, ajan sonra başlasa da olur).
+	baslatDurumSunucusu()
 
 	// Token yoksa ilk kurulum: kullanıcıdan 6 haneli kodu iste.
 	if istemci.Token == "" {
@@ -92,11 +98,17 @@ func main() {
 // ilkKurulum — 6 haneli kodu sorar, eşleşir, token'ı kaydeder, autostart kurar.
 func ilkKurulum() bool {
 	for {
+		// Çok satırlı metin: Windows diyaloğu tek uzun satırı kırpıyordu ("Bil..." kesiği).
 		kod, err := zenity.Entry(
-			"Hizmetra Panel'de  Ayarlar → Yazıcılar → Bilgisayar Programı  bölümündeki\n"+
-				"6 haneli Kurulum Kodunu girin:",
+			"Kuruluma hoş geldiniz!\n\n"+
+				"1) Hizmetra Panel'i açın\n"+
+				"2) Ayarlar → Yazıcılar → Bilgisayar Programı\n"+
+				"3) \"Kurulum Kodu Üret\"e basın\n\n"+
+				"Paneldeki 6 haneli kodu aşağıya yazın:\n\n"+
+				"Devam ederek Kullanım Koşulları'nı kabul etmiş olursunuz:\n"+
+				"github.com/kafe-panel/hizmetra-kopru/blob/main/KULLANIM.md",
 			zenity.Title("Hizmetra Köprü — Kurulum"),
-			zenity.EntryText(""),
+			zenity.EntryText(panodanKodOner()),
 		)
 		if err != nil { // kullanıcı iptal etti
 			return false
@@ -143,6 +155,10 @@ func ilkKurulum() bool {
 			fmt.Sprintf("Bağlandı: %s\n\nBilgisayar açıldığında program kendiliğinden çalışacak.\n"+
 				"Şimdi panelden yazıcınızı seçebilirsiniz:\nYazıcılar → Yeni Yazıcı → Bulunan Yazıcılar", cevap.IsletmeAd),
 			zenity.Title("Hizmetra Köprü — Kurulum tamam"))
+		// "Tamam"dan sonra durum penceresini aç: bağlantı + hesap tek bakışta görünsün.
+		if durumURL != "" {
+			tarayicidaAc(durumURL)
+		}
 		return true
 	}
 }
@@ -190,8 +206,8 @@ func trayHazir() {
 	mDurum := systray.AddMenuItem("Bağlanıyor…", "")
 	mDurum.Disable()
 	systray.AddSeparator()
+	mGoster := systray.AddMenuItem("Durumu Göster", "Bağlantı, yazıcılar ve fiş günlüğünü penceresinde gösterir")
 	mPanel := systray.AddMenuItem("Paneli Aç", "Hizmetra Panel'i tarayıcıda açar")
-	mGunluk := systray.AddMenuItem("Günlüğü Aç", "Teknik günlük dosyası")
 	systray.AddSeparator()
 	mCikis := systray.AddMenuItem("Çıkış", "Programı kapat (fişler basılmaz!)")
 
@@ -223,10 +239,12 @@ func trayHazir() {
 	go func() {
 		for {
 			select {
+			case <-mGoster.ClickedCh:
+				if durumURL != "" {
+					tarayicidaAc(durumURL)
+				}
 			case <-mPanel.ClickedCh:
 				tarayicidaAc(panelAdresi())
-			case <-mGunluk.ClickedCh:
-				tarayicidaAc(gunluk.Yolu())
 			case <-mCikis.ClickedCh:
 				systray.Quit()
 				return
@@ -273,4 +291,71 @@ func kisalt(s string, n int) string {
 		return s
 	}
 	return string(r[:n]) + "…"
+}
+
+// baslatDurumSunucusu — yerel durum penceresi sunucusunu (127.0.0.1) açar ve
+// açılacak token'lı adresi durumURL'e koyar. Başarısız olursa ajan çalışmaya
+// devam eder; yalnız "Durumu Göster" işlevsiz kalır.
+func baslatDurumSunucusu() {
+	s := durumsrv.Yeni("Hizmetra Köprü", Surum, ozetTopla, gunluk.SonSatirlar)
+	u, err := s.Baslat()
+	if err != nil {
+		gunluk.Yaz("durum penceresi başlatılamadı: %v", err)
+		return
+	}
+	durumURL = u
+	gunluk.Yaz("durum penceresi yerelde hazır") // token'lı URL LOGLANMAZ (gizlilik)
+}
+
+// ozetTopla — durum penceresinin gösterdiği anlık özeti globallerden derler.
+func ozetTopla() durumsrv.Ozet {
+	d := durum.Oku()
+	var yaziciAdlari []string
+	if yzc, err := kesif.Bul(); err == nil {
+		for _, y := range yzc {
+			yaziciAdlari = append(yaziciAdlari, y.Ad)
+		}
+	}
+	sonBaski := ""
+	if !d.SonBaski.IsZero() {
+		sonBaski = d.SonBaski.Format("15:04")
+	}
+	return durumsrv.Ozet{
+		Bagli:     d.Bagli,
+		IsletmeAd: yapilandirma.IsletmeAd,
+		Sunucu:    yapilandirma.SunucuAdresi(),
+		Surum:     Surum,
+		Yazicilar: yaziciAdlari,
+		SonIsler:  sonIsSatirlari(20),
+		SonHata:   d.SonHata,
+		SonBaski:  sonBaski,
+	}
+}
+
+// sonIsSatirlari — bellekteki günlükten baskı işi satırlarını süzer (fiş özeti).
+func sonIsSatirlari(n int) []string {
+	var out []string
+	for _, s := range gunluk.SonSatirlar(200) {
+		if strings.Contains(s, "iş #") {
+			out = append(out, s)
+		}
+	}
+	if len(out) > n {
+		out = out[len(out)-n:]
+	}
+	return out
+}
+
+// panodanKodOner — panoda tam 6 haneli sayı varsa giriş alanına önerir (panel
+// "Kopyala" butonuyla akışı tek tıka indirir). Pano okunamazsa boş döner.
+func panodanKodOner() string {
+	out, err := exec.Command("powershell", "-NoProfile", "-Command", "Get-Clipboard").Output()
+	if err != nil {
+		return ""
+	}
+	s := strings.TrimSpace(string(out))
+	if len(s) == 6 && strings.IndexFunc(s, func(r rune) bool { return r < '0' || r > '9' }) == -1 {
+		return s
+	}
+	return ""
 }

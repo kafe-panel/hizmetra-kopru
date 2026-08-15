@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Hizmetra Köprü — Durum</title>
+<style>
+  :root {
+    --zemin: #f4f6f9;
+    --yuzey: #ffffff;
+    --cizgi: #e5e7eb;
+    --cizgi-2: #eef1f5;
+    --metin: #0f172a;
+    --metin-2: #64748b;
+    --metin-3: #94a3b8;
+    --teal: #0d9488;
+    --teal-2: #0f766e;
+    --yesil: #10b981;
+    --kirmizi: #ef4444;
+    --amber: #f59e0b;
+    --fis-kagit: #fbfaf6;
+    --fis-cizgi: rgba(15,23,42,.045);
+    --fis-metin: #334155;
+    --fis-soluk: #94a3b8;
+    --golge: 0 1px 2px rgba(15,23,42,.04), 0 2px 8px rgba(15,23,42,.05);
+    --logo-chip: #ffffff;
+  }
+  :root { color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --zemin: #0b1220;
+      --yuzey: #141d2e;
+      --cizgi: #26324a;
+      --cizgi-2: #1c2740;
+      --metin: #e7edf7;
+      --metin-2: #97a6be;
+      --metin-3: #6b7c98;
+      --teal: #2dd4bf;
+      --teal-2: #14b8a6;
+      --yesil: #34d399;
+      --kirmizi: #f87171;
+      --amber: #fbbf24;
+      --fis-kagit: #101a2b;
+      --fis-cizgi: rgba(255,255,255,.04);
+      --fis-metin: #c3cfe2;
+      --fis-soluk: #63748f;
+      --golge: 0 1px 2px rgba(0,0,0,.3), 0 2px 10px rgba(0,0,0,.35);
+      --logo-chip: #ffffff;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--zemin);
+    color: var(--metin);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .kucuk-cap { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--metin-3); }
+
+  .sarmal { max-width: 760px; margin: 0 auto; padding: 20px 20px 40px; }
+
+  /* Üst şerit */
+  .serit {
+    display: flex; align-items: center; gap: 14px;
+    padding: 4px 2px 18px;
+    border-bottom: 1px solid var(--cizgi);
+    margin-bottom: 20px;
+  }
+  .logo-chip {
+    background: var(--logo-chip);
+    border: 1px solid var(--cizgi);
+    border-radius: 10px;
+    padding: 7px 12px;
+    display: flex; align-items: center;
+    box-shadow: var(--golge);
+    flex: 0 0 auto;
+  }
+  .logo-chip img { display: block; height: 26px; width: auto; }
+  .serit-ad { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .marka { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+  .serit-alt { font-size: 12.5px; color: var(--metin-2); }
+  .serit-bosluk { flex: 1 1 auto; }
+
+  /* Durum kartı */
+  .durum-kart {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--yuzey);
+    border: 1px solid var(--cizgi);
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-shadow: var(--golge);
+    margin-bottom: 18px;
+  }
+  .nokta-sarmal { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; }
+  .nokta {
+    width: 15px; height: 15px; border-radius: 50%;
+    background: var(--amber);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--amber) 18%, transparent);
+    transition: background .2s, box-shadow .2s;
+  }
+  .nokta.bagli { background: var(--yesil); box-shadow: 0 0 0 5px color-mix(in srgb, var(--yesil) 20%, transparent); }
+  .nokta.hata  { background: var(--kirmizi); box-shadow: 0 0 0 5px color-mix(in srgb, var(--kirmizi) 20%, transparent); }
+  .nokta.bekle { animation: nabiz 1.4s ease-in-out infinite; }
+  @keyframes nabiz { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+  @media (prefers-reduced-motion: reduce) { .nokta.bekle { animation: none; } }
+
+  .durum-govde { min-width: 0; }
+  .durum-baslik { font-size: 18px; font-weight: 640; letter-spacing: -.01em; }
+  .durum-alt { font-size: 13px; color: var(--metin-2); margin-top: 2px; overflow-wrap: anywhere; }
+  .durum-alt.hata { color: var(--kirmizi); }
+
+  /* İki kolon */
+  .kolonlar { display: flex; gap: 16px; align-items: stretch; }
+  .kolonlar > * { min-width: 0; }
+  .yazici-kutu { flex: 1 1 44%; }
+  .fis-kolon  { flex: 1 1 56%; }
+
+  .kutu {
+    background: var(--yuzey);
+    border: 1px solid var(--cizgi);
+    border-radius: 14px;
+    box-shadow: var(--golge);
+    display: flex; flex-direction: column;
+  }
+  .kutu-bas { padding: 14px 16px 10px; }
+  .kutu-govde { padding: 4px 8px 10px; overflow-y: auto; max-height: 300px; }
+
+  .yazici-liste { list-style: none; margin: 0; padding: 0; }
+  .yazici-liste li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 8px; border-radius: 8px;
+    font-family: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+    font-size: 13px;
+  }
+  .yazici-liste li + li { border-top: 1px solid var(--cizgi-2); }
+  .y-nokta { width: 7px; height: 7px; border-radius: 50%; background: var(--yesil); flex: 0 0 auto; }
+  .y-ad { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bos { color: var(--metin-3); font-style: italic; padding: 12px 8px; }
+
+  /* Fiş şeridi — imza öğesi */
+  .fis {
+    position: relative;
+    background: var(--fis-kagit);
+    border: 1px solid var(--cizgi);
+    border-radius: 4px 4px 10px 10px;
+    box-shadow: var(--golge);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+  }
+  .fis-delik {
+    height: 13px; flex: 0 0 auto;
+    background:
+      radial-gradient(circle 3.2px at center, var(--zemin) 0 3.2px, transparent 3.6px) repeat-x;
+    background-size: 15px 13px;
+    background-position: 9px center;
+    border-bottom: 1px dashed var(--cizgi);
+  }
+  .fis-govde {
+    padding: 2px 14px 14px;
+    overflow-y: auto;
+    max-height: 300px;
+    font-family: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--fis-metin);
+    background-image: repeating-linear-gradient(0deg, transparent 0 22px, var(--fis-cizgi) 22px 23px);
+    scrollbar-width: thin;
+  }
+  .fis-baslik {
+    text-align: center;
+    padding: 12px 0 8px;
+    color: var(--metin-2);
+    letter-spacing: .16em;
+    font-size: 10.5px; font-weight: 700;
+    border-bottom: 1px dashed var(--cizgi);
+    margin-bottom: 8px;
+    position: sticky; top: 0;
+    background: var(--fis-kagit);
+  }
+  .fis-satir { display: flex; gap: 8px; padding: 1px 0; overflow-wrap: anywhere; }
+  .fis-saat { color: var(--fis-soluk); flex: 0 0 auto; }
+  .fis-mesaj { flex: 1 1 auto; }
+  .fis-satir.ok  .fis-mesaj { color: var(--teal-2); }
+  .fis-satir.err .fis-mesaj { color: var(--kirmizi); }
+  .fis-bos { color: var(--fis-soluk); text-align: center; padding: 18px 0; font-style: italic; }
+
+  /* Alt */
+  .alt { display: flex; align-items: center; gap: 14px; margin-top: 20px; flex-wrap: wrap; }
+  .panel-dugme {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--teal); color: #fff;
+    text-decoration: none; font-weight: 600; font-size: 13.5px;
+    padding: 9px 16px; border-radius: 9px;
+    box-shadow: var(--golge);
+    transition: background .15s;
+  }
+  .panel-dugme:hover { background: var(--teal-2); }
+  .alt-ipuc { font-size: 12px; color: var(--metin-3); }
+
+  noscript .uyari { display: block; background: var(--yuzey); border: 1px solid var(--cizgi); border-radius: 10px; padding: 14px; color: var(--metin-2); }
+
+  @media (max-width: 640px) {
+    .kolonlar { flex-direction: column; }
+    .kutu-govde, .fis-govde { max-height: 240px; }
+  }
+</style>
+</head>
+<body>
+  <div class="sarmal">
+    <header class="serit">
+      <div class="logo-chip"><img src="{{.LogoURI}}" alt="Hizmetra"></div>
+      <div class="serit-ad">
+        <div class="marka">{{.Ad}}</div>
+        <div class="serit-alt">Fiş yazıcı köprüsü · v{{.Surum}}</div>
+      </div>
+      <div class="serit-bosluk"></div>
+    </header>
+
+    <noscript><div class="uyari">Bu durum penceresi için tarayıcıda JavaScript gerekir.</div></noscript>
+
+    <section class="durum-kart">
+      <div class="nokta-sarmal"><span class="nokta bekle" id="nokta"></span></div>
+      <div class="durum-govde">
+        <div class="durum-baslik" id="durumBaslik">Bağlanıyor…</div>
+        <div class="durum-alt" id="durumAlt">Panel bağlantısı kuruluyor</div>
+      </div>
+    </section>
+
+    <div class="kolonlar">
+      <section class="kutu yazici-kutu">
+        <div class="kutu-bas kucuk-cap">Bu bilgisayarın yazıcıları</div>
+        <div class="kutu-govde">
+          <ul class="yazici-liste" id="yaziciListe"></ul>
+        </div>
+      </section>
+
+      <section class="fis-kolon">
+        <div class="fis">
+          <div class="fis-delik"></div>
+          <div class="fis-govde" id="fisGovde">
+            <div class="fis-baslik">HİZMETRA KÖPRÜ · FİŞ GÜNLÜĞÜ</div>
+            <div id="fisSatirlar"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="alt">
+      <a class="panel-dugme" id="panelLink" href="#" target="_blank" rel="noopener">Paneli Aç ↗</a>
+      <span class="alt-ipuc">Bu pencere 3 saniyede bir kendini yeniler.</span>
+    </div>
+  </div>
+
+<script>
+const TOKEN = "{{.Token}}";
+const ILK = {{.IlkVeri}};
+
+function kacis(s) {
+  return String(s).replace(/[&<>"]/g, function(c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+  });
+}
+
+function fisSatirYap(satir) {
+  // Satır biçimi: "15:04:05  mesaj..."
+  const m = /^(\d{2}:\d{2}:\d{2})\s+(.*)$/.exec(satir);
+  const saat = m ? m[1] : "";
+  const mesaj = m ? m[2] : satir;
+  let sinif = "fis-satir";
+  if (/basıldı|basildi|Bağlandı|Baglandi|hazır|hazir/i.test(mesaj)) sinif += " ok";
+  else if (/BASILAMADI|hata|geçersiz|gecersiz|ulaşıl|ulasil|yetkisiz/i.test(mesaj)) sinif += " err";
+  return '<div class="' + sinif + '"><span class="fis-saat">' + kacis(saat) +
+         '</span><span class="fis-mesaj">' + kacis(mesaj) + '</span></div>';
+}
+
+function ciz(v) {
+  const oz = (v && v.ozet) || {};
+  const gunluk = (v && v.gunluk) || [];
+
+  // Durum noktası + metin
+  const nokta = document.getElementById("nokta");
+  const baslik = document.getElementById("durumBaslik");
+  const alt = document.getElementById("durumAlt");
+  nokta.className = "nokta";
+  alt.className = "durum-alt";
+  if (oz.bagli) {
+    nokta.classList.add("bagli");
+    baslik.textContent = oz.isletme_ad ? ("Bağlı — " + oz.isletme_ad) : "Bağlı";
+    const yz = (oz.yazicilar || []).length;
+    let a = oz.son_baski ? ("Son fiş " + oz.son_baski) : "Fiş bekleniyor";
+    a += yz ? (" · " + yz + " yazıcı hazır") : " · yazıcı bulunamadı";
+    alt.textContent = a;
+  } else if (oz.son_hata) {
+    nokta.classList.add("hata");
+    baslik.textContent = "Bağlantı sorunu";
+    alt.classList.add("hata");
+    alt.textContent = oz.son_hata;
+  } else {
+    nokta.classList.add("bekle");
+    baslik.textContent = "Bağlanıyor…";
+    alt.textContent = "Panel bağlantısı kuruluyor";
+  }
+
+  // Yazıcılar
+  const liste = document.getElementById("yaziciListe");
+  const yz = oz.yazicilar || [];
+  if (yz.length) {
+    liste.innerHTML = yz.map(function(ad) {
+      return '<li><span class="y-nokta"></span><span class="y-ad">' + kacis(ad) + "</span></li>";
+    }).join("");
+  } else {
+    liste.innerHTML = '<li class="bos">Bu bilgisayarda yazıcı bulunamadı</li>';
+  }
+
+  // Fiş şeridi (günlük)
+  const fis = document.getElementById("fisSatirlar");
+  const govde = document.getElementById("fisGovde");
+  const dipte = govde.scrollHeight - govde.scrollTop - govde.clientHeight < 24;
+  if (gunluk.length) {
+    fis.innerHTML = gunluk.map(fisSatirYap).join("");
+  } else {
+    fis.innerHTML = '<div class="fis-bos">Henüz kayıt yok — fiş geldikçe burada görünür.</div>';
+  }
+  if (dipte) govde.scrollTop = govde.scrollHeight;
+
+  // Panel linki
+  if (v && v.panel_url) {
+    document.getElementById("panelLink").href = v.panel_url;
+  }
+}
+
+async function tazele() {
+  try {
+    const r = await fetch("/veri.json?t=" + TOKEN, { cache: "no-store" });
+    if (!r.ok) return;
+    ciz(await r.json());
+  } catch (e) {
+    // Ağ yok / sunucu kapandı — mevcut ekran kalsın, sonraki turda dener.
+  }
+}
+
+ciz(ILK);
+setInterval(tazele, 3000);
+</script>
+</body>
+</html>
