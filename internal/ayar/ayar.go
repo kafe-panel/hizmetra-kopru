@@ -91,6 +91,21 @@ func Kaydet(a *Ayar) error {
 	return os.WriteFile(p, ham, 0o600)
 }
 
+// Sil — config.json'u kaldırır (token dahil her şey). "Onar" (yeniden
+// eşleştir) ve "Kaldır" akışları çağırır; dosya zaten yoksa hata DÖNMEZ.
+// SunucuURL de gittiği için sonraki eşleştirme bilinen sunucuların hepsini
+// yeniden dener (kod hangi paneldeyse oraya bağlanır).
+func Sil() error {
+	p, err := yol()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 // SunucuAdresi — env ezmesi > kayıtlı > varsayılan.
 func (a *Ayar) SunucuAdresi() string {
 	if v := os.Getenv("HIZMETRA_API"); v != "" {

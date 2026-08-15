@@ -27,3 +27,26 @@ func TestSunucuAdaylari(t *testing.T) {
 		t.Fatalf("env tek aday olmalı: %v", got)
 	}
 }
+
+// TestSilConfigKaldirir — "Onar"/"Kaldır" akışı config.json'u siler; sonraki
+// Yukle boş Ayar döner (= yeniden eşleştirme gerekir). Dosya yokken de hata yok.
+func TestSilConfigKaldirir(t *testing.T) {
+	t.Setenv("APPDATA", t.TempDir()) // os.UserConfigDir (Windows) → izole dizin
+	if err := Kaydet(&Ayar{Token: "x", SunucuURL: "https://ornek"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Sil(); err != nil {
+		t.Fatal(err)
+	}
+	a, err := Yukle()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Token != "" || a.SunucuURL != "" {
+		t.Fatalf("config silinmeli, kaldı: %+v", a)
+	}
+	// İkinci Sil (dosya yok) → hata YOK (idempotent).
+	if err := Sil(); err != nil {
+		t.Fatalf("dosya yokken Sil hata vermemeli: %v", err)
+	}
+}
