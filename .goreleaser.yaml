@@ -41,7 +41,7 @@ changelog:
 
 release:
   draft: false
-  name_template: "Hizmetra Köprü {{.Version}}"
+  name_template: "Hizmetra Yazıcı {{.Version}}"
   header: |
     ## Kurulum
 

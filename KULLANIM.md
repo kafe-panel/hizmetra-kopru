@@ -1,4 +1,4 @@
-# Hizmetra Köprü — Kullanım Koşulları
+# Hizmetra Yazıcı — Kullanım Koşulları
 
 1. Bu program MIT lisansıyla açık kaynaklıdır (LICENSE); "olduğu gibi" sunulur, garanti verilmez.
 2. Program yalnız Hizmetra Panel'inizden gelen fişleri bilgisayarınızdaki yazıcılara basar.

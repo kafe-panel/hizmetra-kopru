@@ -1,4 +1,4 @@
-// Hizmetra Köprü — kafe bilgisayarındaki fiş yazıcılarını Hizmetra Panel'e bağlar.
+// Hizmetra Yazıcı — kafe bilgisayarındaki fiş yazıcılarını Hizmetra Panel'e bağlar.
 //
 // Çalışma: panelden alınan 6 haneli kurulum kodunu bir kez girersiniz; ajan
 // bundan sonra panelden gelen fişleri çekip yazıcıya basar. Buluttaki sunucu
@@ -43,19 +43,19 @@ var (
 func main() {
 	// Aynı PC'de İKİ KOPYA çalışırsa aynı fiş iki kez basılabilir → tek kopya kilidi.
 	if !tekKopyaKilidi() {
-		_ = zenity.Info("Hizmetra Köprü zaten çalışıyor.\n\nSaat yanındaki (sistem tepsisi) simgesinden ulaşabilirsiniz.",
-			zenity.Title("Hizmetra Köprü"))
+		_ = zenity.Info("Hizmetra Yazıcı zaten çalışıyor.\n\nSaat yanındaki (sistem tepsisi) simgesinden ulaşabilirsiniz.",
+			zenity.Title("Hizmetra Yazıcı"))
 		return
 	}
 
 	dizin, err := ayar.Dizin()
 	if err != nil {
-		_ = zenity.Error("Ayar klasörü oluşturulamadı: "+err.Error(), zenity.Title("Hizmetra Köprü"))
+		_ = zenity.Error("Ayar klasörü oluşturulamadı: "+err.Error(), zenity.Title("Hizmetra Yazıcı"))
 		return
 	}
 	gunluk.Baslat(dizin)
 	defer gunluk.Kapat()
-	gunluk.Yaz("=== Hizmetra Köprü %s başladı ===", Surum)
+	gunluk.Yaz("=== Hizmetra Yazıcı %s başladı ===", Surum)
 
 	yapilandirma, err = ayar.Yukle()
 	if err != nil {
@@ -107,7 +107,7 @@ func ilkKurulum() bool {
 				"Paneldeki 6 haneli kodu aşağıya yazın:\n\n"+
 				"Devam ederek Kullanım Koşulları'nı kabul etmiş olursunuz:\n"+
 				"github.com/kafe-panel/hizmetra-kopru/blob/main/KULLANIM.md",
-			zenity.Title("Hizmetra Köprü — Kurulum"),
+			zenity.Title("Hizmetra Yazıcı — Kurulum"),
 			zenity.EntryText(panodanKodOner()),
 		)
 		if err != nil { // kullanıcı iptal etti
@@ -115,7 +115,7 @@ func ilkKurulum() bool {
 		}
 		kod = strings.TrimSpace(kod)
 		if len(kod) != 6 {
-			_ = zenity.Warning("Kod 6 haneli olmalı.", zenity.Title("Hizmetra Köprü"))
+			_ = zenity.Warning("Kod 6 haneli olmalı.", zenity.Title("Hizmetra Yazıcı"))
 			continue
 		}
 
@@ -130,7 +130,7 @@ func ilkKurulum() bool {
 				mesaj = "Sunucuya ulaşılamadı:\n" + err.Error() + "\n\nİnternet bağlantınızı kontrol edin."
 			}
 			if zenity.Question(mesaj+"\n\nTekrar denemek ister misiniz?",
-				zenity.Title("Hizmetra Köprü"), zenity.OKLabel("Tekrar dene"), zenity.CancelLabel("Çık")) != nil {
+				zenity.Title("Hizmetra Yazıcı"), zenity.OKLabel("Tekrar dene"), zenity.CancelLabel("Çık")) != nil {
 				return false
 			}
 			continue
@@ -154,7 +154,7 @@ func ilkKurulum() bool {
 		_ = zenity.Info(
 			fmt.Sprintf("Bağlandı: %s\n\nBilgisayar açıldığında program kendiliğinden çalışacak.\n"+
 				"Şimdi panelden yazıcınızı seçebilirsiniz:\nYazıcılar → Yeni Yazıcı → Bulunan Yazıcılar", cevap.IsletmeAd),
-			zenity.Title("Hizmetra Köprü — Kurulum tamam"))
+			zenity.Title("Hizmetra Yazıcı — Kurulum tamam"))
 		// "Tamam"dan sonra durum penceresini aç: bağlantı + hesap tek bakışta görünsün.
 		if durumURL != "" {
 			tarayicidaAc(durumURL)
@@ -188,7 +188,7 @@ func surumKontrolDongusu() {
 	for {
 		if bilgi, err := istemci.Surum(); err == nil && bilgi.Surum != "" && bilgi.Surum != Surum {
 			gunluk.Yaz("yeni sürüm var: %s (mevcut %s)", bilgi.Surum, Surum)
-			systray.SetTooltip("Hizmetra Köprü — güncelleme var: " + bilgi.Surum)
+			systray.SetTooltip("Hizmetra Yazıcı — güncelleme var: " + bilgi.Surum)
 		}
 		select {
 		case <-dur:
@@ -201,7 +201,7 @@ func surumKontrolDongusu() {
 func trayHazir() {
 	systray.SetIcon(simgeVerisi)
 	systray.SetTitle("")
-	systray.SetTooltip("Hizmetra Köprü")
+	systray.SetTooltip("Hizmetra Yazıcı")
 
 	mDurum := systray.AddMenuItem("Bağlanıyor…", "")
 	mDurum.Disable()
@@ -297,7 +297,7 @@ func kisalt(s string, n int) string {
 // açılacak token'lı adresi durumURL'e koyar. Başarısız olursa ajan çalışmaya
 // devam eder; yalnız "Durumu Göster" işlevsiz kalır.
 func baslatDurumSunucusu() {
-	s := durumsrv.Yeni("Hizmetra Köprü", Surum, ozetTopla, gunluk.SonSatirlar)
+	s := durumsrv.Yeni("Hizmetra Yazıcı", Surum, ozetTopla, gunluk.SonSatirlar)
 	u, err := s.Baslat()
 	if err != nil {
 		gunluk.Yaz("durum penceresi başlatılamadı: %v", err)

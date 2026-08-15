@@ -1,4 +1,4 @@
-# Hizmetra Köprü
+# Hizmetra Yazıcı
 
 Kafe bilgisayarındaki **fiş yazıcılarını Hizmetra Panel'e bağlayan** küçük bir Windows programı.
 
@@ -75,7 +75,8 @@ MIT — bkz. [LICENSE](LICENSE).
 
 ## English summary
 
-**Hizmetra Köprü** ("Hizmetra Bridge") is a small Windows tray application that connects
+**Hizmetra Yazıcı** ("Hizmetra Printer"; the repo/exe keep the original technical name
+`hizmetra-kopru`, "bridge") is a small Windows tray application that connects
 thermal receipt printers on a café's local network to the Hizmetra Panel cloud POS.
 It polls the server over outbound HTTPS for pending print jobs and writes raw ESC/POS
 bytes either to a Windows printer (RAW spooler mode, bypassing driver rendering) or

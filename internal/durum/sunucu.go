@@ -40,7 +40,7 @@ type Ozet struct {
 // Sunucu — durum penceresi HTTP sunucusu.
 type Sunucu struct {
 	Token   string
-	ad      string // üst şeritte gösterilen uygulama adı ("Hizmetra Köprü")
+	ad      string // üst şeritte gösterilen uygulama adı ("Hizmetra Yazıcı")
 	surum   string
 	ozet    func() Ozet
 	gunluk  func(n int) []string

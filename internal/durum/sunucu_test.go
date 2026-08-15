@@ -24,8 +24,10 @@ func TestDurumSayfasiTokenIster(t *testing.T) {
 }
 
 // TestSayfaIsletmeAdiVeYaziciGosterir — tokenli sayfa özet alanlarını render eder.
+// Üst şeritteki uygulama adı GÖRÜNEN ad "Hizmetra Yazıcı"dır (v0.3.0 rename;
+// teknik kimlik hizmetra-kopru/HizmetraKopru değişmez).
 func TestSayfaIsletmeAdiVeYaziciGosterir(t *testing.T) {
-	d := Yeni("Hizmetra Köprü", "0.2.0", func() Ozet {
+	d := Yeni("Hizmetra Yazıcı", "0.3.0", func() Ozet {
 		return Ozet{Bagli: true, IsletmeAd: "Çokluşubetemiz", Yazicilar: []string{"POS-80"}}
 	}, func(int) []string { return []string{"15:04:05  iş #7 → POS-80 (12 bayt, tip=kasa)"} })
 	srv := httptest.NewServer(d.Handler())
@@ -38,10 +40,13 @@ func TestSayfaIsletmeAdiVeYaziciGosterir(t *testing.T) {
 	defer r.Body.Close()
 	govde, _ := io.ReadAll(r.Body)
 	metin := string(govde)
-	for _, beklenen := range []string{"Çokluşubetemiz", "POS-80", "iş #7"} {
+	for _, beklenen := range []string{"Hizmetra Yazıcı", "Çokluşubetemiz", "POS-80", "iş #7"} {
 		if !strings.Contains(metin, beklenen) {
 			t.Errorf("sayfada %q yok", beklenen)
 		}
+	}
+	if strings.Contains(metin, "Hizmetra Köprü") {
+		t.Error("eski görünen ad 'Hizmetra Köprü' sayfada kalmamalı")
 	}
 }
 
