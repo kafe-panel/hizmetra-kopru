@@ -110,6 +110,17 @@ func pencereYasaDongusu(url string, genislik, yukseklik int, sonuc chan<- error)
 			Width:  uint(genislik),
 			Height: uint(yukseklik),
 			Center: true,
+			// IconId=1: exe'ye winres/winres.json ile gömülen grup ikonun
+			// SAYISAL kaynak kimliği. winres.json'da RT_GROUP_ICON anahtarı
+			// "#1"dir — go-winres'te "#" öneki kaynağı SAYISAL ID yapar (öneksiz
+			// "APP"/"1" gibi anahtarlar STRING ad olarak gömülür). go-webview2
+			// pencere ikonunu LoadImageW + MAKEINTRESOURCE(IconId) ile yükler; bu
+			// yalnız SAYISAL ID'yi çözer, STRING adı DEĞİL — bu yüzden anahtar
+			// mutlaka "#1" olmalı. Bu olmadan pencere/görev-çubuğu Windows'un
+			// jenerik varsayılan simgesini gösteriyordu (emre 2026-08-16: "dandik
+			// bi uygulama gibi görünüyor, logomuz yok"). GERÇEK pencerede
+			// WM_GETICON ile doğrulandı (0 → non-zero handle).
+			IconId: 1,
 		},
 	})
 	if w == nil {
