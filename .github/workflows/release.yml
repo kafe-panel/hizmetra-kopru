@@ -38,6 +38,43 @@ jobs:
       # SignPath onayı gelince buraya imzalama adımı eklenecek:
       # - uses: signpath/github-action-submit-signing-request@v1
 
+  # macOS ikilileri (amd64 + arm64). AYRI job + macos-latest ZORUNLU: fyne.io/systray
+  # macOS'ta Cocoa (Objective-C) kullanır → CGO_ENABLED=1 ŞART, ubuntu'da darwin'e
+  # cgo cross-compile YOK. Bu yüzden .goreleaser.yaml'da darwin build'i yoktur;
+  # burada plain `go build` ile üretilip (installer job'ıyla AYNI desen) goreleaser'ın
+  # yayınladığı release'e ek asset olarak yüklenir. macos-latest (Apple Silicon)
+  # runner'ı evrensel SDK ile hem arm64 (native) hem amd64 (cgo cross) derler.
+  macos:
+    name: macOS derlemesi (CGO — Cocoa tray)
+    needs: goreleaser
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Darwin ikililerini derle (amd64 + arm64, CGO_ENABLED=1)
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          for arch in amd64 arm64; do
+            GOOS=darwin GOARCH="$arch" go build \
+              -ldflags "-s -w -X main.Surum=$VER" \
+              -o "hizmetra-kopru_darwin_$arch" \
+              ./cmd/hizmetra-kopru
+          done
+
+      - name: Darwin ikililerini release'e yükle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            hizmetra-kopru_darwin_amd64 \
+            hizmetra-kopru_darwin_arm64 \
+            --repo "${{ github.repository }}" --clobber
+
   # Inno Setup installer (Task C4). AYRI job + windows-latest ZORUNLU: goreleaser
   # yukarıda ubuntu-latest'te CROSS-COMPILE ediyor (CGO_ENABLED=0, GOOS=windows) —
   # iscc.exe Windows-only olduğu için aynı job'da çalışamaz. goreleaser'ın az önce

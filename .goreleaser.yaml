@@ -8,6 +8,13 @@ before:
     # goreleaser çalışmadan ÖNCE release workflow'undaki "go-winres" adımında üretilir
     # (böylece sürüm etiketten gelir). go build onu main paketinden otomatik linkler.
 
+# NOT (macOS): darwin build'i BURADA YOK — bilerek. fyne.io/systray'in macOS
+# arka ucu Cocoa (Objective-C) ve CGO_ENABLED=1 ŞART; ubuntu-latest'te darwin'e
+# cgo cross-compile edilemez (osxcross yok). Bu yüzden macOS ikilileri release
+# workflow'undaki AYRI "macos" job'ında (macos-latest, CGO_ENABLED=1) plain
+# `go build` ile üretilip aynı release'e yüklenir — installer job'ının deseninin
+# aynısı. Windows+Linux (ikisi de CGO_ENABLED=0) burada cross-compile edilir.
+
 builds:
   - id: windows
     main: ./cmd/hizmetra-kopru
@@ -21,12 +28,29 @@ builds:
     ldflags:
       - -H windowsgui -s -w -X main.Surum={{.Version}}
 
+  - id: linux
+    main: ./cmd/hizmetra-kopru
+    binary: hizmetra-kopru
+    # systray Linux'ta dbus (saf Go) kullanır → cgo GEREKMEZ, cross-compile olur.
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    # -H windowsgui YOK (yalnız Windows'a özgü); -s -w ile ikili küçültülür.
+    ldflags:
+      - -s -w -X main.Surum={{.Version}}
+
 archives:
-  # Çıplak .exe de yayınlansın: kafe kullanıcısı zip açmakla uğraşmasın
+  # Çıplak ikili yayınlansın: kafe kullanıcısı zip açmakla uğraşmasın
   # (kurulum 3 dakikada bitsin diye — README'deki 1. adım doğrudan bu dosya).
+  #
+  # name_template KOŞULLU: Windows'ta "hizmetra-kopru" (+ otomatik .exe uzantısı)
+  # = "hizmetra-kopru.exe" — installer job'ı ve README bu ADI birebir bekler,
+  # DEĞİŞTİRME. Linux'ta iki mimari çakışmasın diye os+arch eklenir
+  # (hizmetra-kopru_linux_amd64 / _linux_arm64).
   - id: cikti
     formats: [binary]
-    name_template: "hizmetra-kopru"
+    name_template: 'hizmetra-kopru{{ if ne .Os "windows" }}_{{ .Os }}_{{ .Arch }}{{ end }}'
 
 checksum:
   name_template: "checksums.txt"
