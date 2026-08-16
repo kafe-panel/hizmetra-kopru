@@ -44,11 +44,17 @@ Uninstallable=yes
 OutputDir=Output
 OutputBaseFilename=HizmetraYaziciKurulum
 SetupIconFile=..\assets\hizmetra.ico
+; Denetim Masası → Programlar listesinde kaldırma girdisinin SİMGESİ. Bu satır
+; olmadan Inno jenerik bir simge gösteriyordu (emre 2026-08-16: "denetim
+; masasında logosu yok"). {app}\hizmetra.ico [Files] ile kopyalanır (aşağıda).
+UninstallDisplayIcon={app}\hizmetra.ico
 ; Kayıt+kısayol dosyaları küçük; sıkıştırma ayarı gerekmez (Inno varsayılanı yeterli).
 
 [Tasks]
-Name: "desktopicon"; Description: "Masaüstünde kısayol oluştur"; GroupDescription: "Ek görevler:"; Flags: unchecked
-; Flags YOK = Inno varsayılanı "checked" (işaretli) — "checked" diye ayrı bir
+Name: "desktopicon"; Description: "Masaüstünde kısayol oluştur"; GroupDescription: "Ek görevler:"
+; desktopicon artık VARSAYILAN İŞARETLİ (Flags: unchecked KALDIRILDI) — emre
+; 2026-08-16: "kısayol masaüstümde görünmüyor". Kullanıcı istemezse sihirbazda
+; işareti kaldırır. Flags YOK = Inno varsayılanı "checked" (işaretli) — "checked" diye ayrı bir
 ; bayrak YOKTUR (Inno docs: [Tasks] Flags yalnız checkablealone/checkedonce/
 ; dontinheritcheck/exclusive/restart/unchecked tanır). checkedonce de burada
 ; KASITLI kullanılmadı: o, "önceki sürüm bulunduysa İLK AÇILIŞTA unchecked"
@@ -59,10 +65,14 @@ Name: "startupicon"; Description: "Windows açılışında otomatik başlat"; Gr
 
 [Files]
 Source: "hizmetra-kopru.exe"; DestDir: "{app}"; Flags: ignoreversion
+; hizmetra.ico'yu {app}'e kopyala → kısayol + Denetim Masası simgeleri BUNDAN
+; okunur (gömülü exe simgesine güvenmek yerine, ki Windows Search önbelleği
+; bazen jenerik gösteriyordu — emre "logosu yok"). Tek doğruluk kaynağı.
+Source: "..\assets\hizmetra.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\hizmetra.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\hizmetra.ico"; Tasks: desktopicon
 
 [Registry]
 ; v0.3'te Go'nun otomatikBaslatKur'unun yazdığı AYNI desen (HKCU Run, tırnaklı

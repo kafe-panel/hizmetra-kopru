@@ -241,11 +241,19 @@ func trayHazir() {
 	systray.SetTitle("")
 	systray.SetTooltip("Hizmetra Yazıcı")
 
+	// Tepsi simgesine SOL TIK → doğrudan uygulama arayüzünü aç (kullanıcı en sık
+	// bunu ister). SAĞ TIK menüyü açar — tappedRight'ı BİLEREK set etmiyoruz;
+	// set edilmeyince systray sağ tıkta menüyü kendi gösterir (systrayRightClick
+	// → showMenu). SetOnTapped callback'i Windows mesaj döngüsü (wndProc) iş
+	// parçacığında koşar; durumPenceresiniAc pencere açılana dek bloklayabildiği
+	// için ayrı goroutine'e alıyoruz — yoksa tek tık boyunca tepsi donar.
+	systray.SetOnTapped(func() { go durumPenceresiniAc() })
+
 	mDurum := systray.AddMenuItem("Bağlanıyor…", "")
 	mDurum.Disable()
 	systray.AddSeparator()
-	mGoster := systray.AddMenuItem("Durumu Göster", "Bağlantı, yazıcılar ve fiş günlüğünü penceresinde gösterir")
-	mPanel := systray.AddMenuItem("Paneli Aç", "Hizmetra Panel'i tarayıcıda açar")
+	mGoster := systray.AddMenuItem("Uygulamayı Aç", "Hizmetra Yazıcı arayüzünü açar — bağlantı, yazıcılar ve fiş günlüğü")
+	mPanel := systray.AddMenuItem("Yönetim Panelini Aç", "Hizmetra yönetim panelini tarayıcıda açar")
 	systray.AddSeparator()
 	mCikis := systray.AddMenuItem("Çıkış", "Programı kapat (fişler basılmaz!)")
 

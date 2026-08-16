@@ -253,7 +253,7 @@
     </div>
 
     <div class="alt">
-      <a class="panel-dugme" id="panelLink" href="#" target="_blank" rel="noopener">Paneli Aç ↗</a>
+      <a class="panel-dugme" id="panelLink" href="#" target="_blank" rel="noopener" style="display:none">Yönetim Panelini Aç ↗</a>
       <span class="alt-ipuc">Bu pencere 3 saniyede bir kendini yeniler.</span>
     </div>
   </div>
@@ -330,9 +330,17 @@ function ciz(v) {
   }
   if (dipte) govde.scrollTop = govde.scrollHeight;
 
-  // Panel linki
+  // Panel linki: yalnız GEÇERLİ bir bulut panel adresi varsa göster+ata.
+  // panel_url boşsa butonu GİZLE — aksi halde href="#" + target="_blank"
+  // mevcut YEREL durum sayfasını yeni sekmede açardı (emre 2026-08-16:
+  // "paneli aç 127.0.0.1'i açıyor, saçma sapan işlevsiz"). Böylece buton
+  // ya doğru bulut paneline gider ya da hiç görünmez.
+  const panelLink = document.getElementById("panelLink");
   if (v && v.panel_url) {
-    document.getElementById("panelLink").href = v.panel_url;
+    panelLink.href = v.panel_url;
+    panelLink.style.display = "";
+  } else {
+    panelLink.style.display = "none";
   }
 }
 
