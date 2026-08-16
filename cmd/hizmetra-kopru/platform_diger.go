@@ -17,5 +17,3 @@ func otomatikBaslatKur(string) error { return nil }
 func otomatikBaslatKaldir() error { return nil }
 
 func otomatikBaslatYolu() string { return "" }
-
-func calisanKopyayiKapat() error { return nil }

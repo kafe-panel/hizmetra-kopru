@@ -18,6 +18,19 @@ type Ayar struct {
 	Token     string `json:"token"`
 	CihazAd   string `json:"cihaz_ad"`
 	IsletmeAd string `json:"isletme_ad"`
+
+	// SonBilinenPort/SonBilinenToken — çalışan sürecin yerel durum sunucusunun
+	// (127.0.0.1, internal/durum) EN SON bilinen adresi (v0.4.0). Aynı
+	// bilgisayarda ikinci bir kopya açılıp tek-kopya kilidini alamazsa buradan
+	// POST /odaklan ile çalışan kopyaya "pencereni öne getir" sinyali gönderir
+	// (bkz. cmd/hizmetra-kopru main.go: digerKopyayaOdaklanDene). SonBilinenToken
+	// YALNIZ bu loopback sunucusuna erişim içindir — Token alanıyla (panel API
+	// yetkisi) KARIŞTIRILMAMALI, sunucuya hiçbir yetki taşımaz. Her başlangıçta
+	// üzerine yazılır; eski/geçersiz bir değer kalmışsa (önceki kopya port
+	// kaydetmeden çökmüş vb.) /odaklan denemesi başarısız olur ve ikinci süreç
+	// sessizce çıkar — bu nadir kenar durum için yeniden deneme YOKTUR.
+	SonBilinenPort  int    `json:"son_bilinen_port,omitempty"`
+	SonBilinenToken string `json:"son_bilinen_token,omitempty"`
 }
 
 // VarsayilanSunucu — panel API kökü. HIZMETRA_API env'i ezer (geliştirme).

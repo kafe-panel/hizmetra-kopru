@@ -39,28 +39,34 @@ type Ozet struct {
 
 // Sunucu — durum penceresi HTTP sunucusu.
 type Sunucu struct {
-	Token   string
-	ad      string // üst şeritte gösterilen uygulama adı ("Hizmetra Yazıcı")
-	surum   string
-	ozet    func() Ozet
-	gunluk  func(n int) []string
-	sablon  *template.Template
-	logoURI template.URL
+	Token     string
+	ad        string // üst şeritte gösterilen uygulama adı ("Hizmetra Yazıcı")
+	surum     string
+	ozet      func() Ozet
+	gunluk    func(n int) []string
+	sablon    *template.Template
+	logoURI   template.URL
+	onOdaklan func() // /odaklan çağrılınca tetiklenir (main.go: pencere.OneGetir())
 }
 
 // Yeni — durum sunucusu kurar. ozet anlık durumu, gunluk son N satırı döndürür.
-func Yeni(isletmeAd, surum string, ozet func() Ozet, gunluk func(int) []string) *Sunucu {
+// onOdaklan — v0.4.0: aynı bilgisayarda ikinci bir kopya açılıp tek-kopya
+// kilidini alamadığında POST /odaklan ile bu sunucuya "pencereni öne getir"
+// sinyali gönderir (bkz. cmd/hizmetra-kopru main.go: digerKopyayaOdaklanDene).
+// nil verilebilir (ör. testlerde), o durumda /odaklan yalnız 200 döner.
+func Yeni(isletmeAd, surum string, ozet func() Ozet, gunluk func(int) []string, onOdaklan func()) *Sunucu {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	uri := template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(logoPNG))
 	return &Sunucu{
-		Token:   hex.EncodeToString(b),
-		ad:      isletmeAd,
-		surum:   surum,
-		ozet:    ozet,
-		gunluk:  gunluk,
-		sablon:  template.Must(template.New("s").Parse(sayfaHTML)),
-		logoURI: uri,
+		Token:     hex.EncodeToString(b),
+		ad:        isletmeAd,
+		surum:     surum,
+		ozet:      ozet,
+		gunluk:    gunluk,
+		sablon:    template.Must(template.New("s").Parse(sayfaHTML)),
+		logoURI:   uri,
+		onOdaklan: onOdaklan,
 	}
 }
 
@@ -116,20 +122,49 @@ func (s *Sunucu) Handler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(s.veriGovdesi())
 	})
+	// /odaklan — v0.4.0: ikinci bir kopya tek-kopya kilidini alamayınca buraya
+	// POST eder; bu çalışan kopyayı öne getirir (bkz. main.go: odaklanGeldi).
+	// Eski "zaten çalışıyor, Güncelle/Onar/Kaldır?" zenity diyaloğunun yerini
+	// alır — soru sormaz, doğrudan pencereyi öne getirir.
+	mux.HandleFunc("/odaklan", func(w http.ResponseWriter, r *http.Request) {
+		if !s.yetkili(r) {
+			http.Error(w, "yetkisiz", http.StatusForbidden)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "yalnız POST", http.StatusMethodNotAllowed)
+			return
+		}
+		// onOdaklan (main.go: pencere.OneGetir(), açık pencere yoksa YENİ bir
+		// WebView penceresi açar) soğuk başlangıçta (WebView2 ortamı ilk kez
+		// kuruluyorsa) saniyelerce sürebilir — gerçek Windows'ta ölçüldü. ASENKRON
+		// tetiklenir ki 200 yanıtı HER ZAMAN hızlı dönsün: ikinci sürecin kısa
+		// (~1sn) istemci zaman aşımı, yavaş bir pencere açılışı yüzünden
+		// yanlışlıkla "ulaşılamadı" görmesin — sinyal zaten iletildi, çağıran
+		// pencerenin açılmasını beklemeden çıkabilir.
+		if s.onOdaklan != nil {
+			go s.onOdaklan()
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 	return mux
 }
 
 // Baslat — 127.0.0.1'de boş bir porta bağlanır ve arka planda servis eder.
-// Açılacak tam adresi ("http://127.0.0.1:PORT/?t=TOKEN") döndürür — çağıran
-// bunu tarayıcıda açar. Token yalnız bu adreste; loglanmaz.
-func (s *Sunucu) Baslat() (string, error) {
+// Açılacak tam adresi ("http://127.0.0.1:PORT/?t=TOKEN") VE bağlandığı port
+// numarasını döndürür. Port, aynı bilgisayardaki ikinci bir kopyanın
+// /odaklan'a ulaşabilmesi için ayar dosyasına yazılır (main.go:
+// baslatDurumSunucusu) — sunucu HER başlangıçta rastgele bir porta bağlanır,
+// bu yüzden port önceden bilinemez. Token yalnız dönen adreste; loglanmaz.
+func (s *Sunucu) Baslat() (string, int, error) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	srv := &http.Server{Handler: s.Handler()}
 	go func() { _ = srv.Serve(l) }()
-	return "http://" + l.Addr().String() + "/?t=" + s.Token, nil
+	port := l.Addr().(*net.TCPAddr).Port
+	return "http://" + l.Addr().String() + "/?t=" + s.Token, port, nil
 }
 
 // panelURLTuret — API kökünden panel adresini türetir (api.X → panel.X).

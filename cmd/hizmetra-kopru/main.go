@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -52,10 +53,12 @@ func main() {
 	defer gunluk.Kapat()
 
 	// Aynı PC'de İKİ KOPYA çalışırsa aynı fiş iki kez basılabilir → tek kopya kilidi.
-	// Kilit tutuluysa kurulu kopya çalışıyordur: "zaten çalışıyor" demek yerine
-	// Güncelle / Onar / Kaldır sorulur (v0.3.0, madde 2). kuruluAkisi true dönerse
-	// çalışan kopya kapatılmış, kilit devralınmış ve normal başlangıç devam eder.
-	if !tekKopyaKilidi() && !kuruluAkisi() {
+	// v0.4.0: kilit tutuluysa artık SORU SORULMAZ (eski "zaten çalışıyor,
+	// Güncelle/Onar/Kaldır?" zenity akışı Inno Setup installer'a devredildi —
+	// bkz. plan Track C4). Çalışan kopyaya yalnızca "pencereni öne getir"
+	// sinyali gönderilir (digerKopyayaOdaklanDene) ve bu süreç sessizce çıkar.
+	if !tekKopyaKilidi() {
+		digerKopyayaOdaklanDene()
 		return
 	}
 	gunluk.Yaz("=== Hizmetra Yazıcı %s başladı ===", Surum)
@@ -68,32 +71,16 @@ func main() {
 	istemci = api.New(yapilandirma.SunucuAdresi())
 	istemci.Token = yapilandirma.Token
 
-	// Kurulu (token var) ama başka yoldan açıldıysa — İndirilenler'deki yeni exe,
-	// eski kopya çalışmıyorken — kurulu konuma taşı, Run anahtarını oraya çevir ve
-	// oradan başlat. Böylece Run anahtarı hiçbir zaman silinebilir bir indirme
-	// dosyasını göstermez. Zaten kurulu yoldaysak yalnız Run anahtarı tazelenir.
-	if istemci.Token != "" && kuruluKopyayaDevret(durumAcArg) {
-		gunluk.Yaz("kurulu kopya devraldı, bu süreç çıkıyor")
-		return
-	}
-
 	// Durum penceresi sunucusunu ERKEN başlat: kurulum bitince "Tamam"dan sonra
 	// otomatik açılabilsin (ozet globalleri canlı okur, ajan sonra başlasa da olur).
 	baslatDurumSunucusu()
 
 	// Token yoksa ilk kurulum: kullanıcıdan 6 haneli kodu iste.
 	if istemci.Token == "" {
-		switch ilkKurulum() {
-		case kurulumIptal:
+		if ilkKurulum() == kurulumIptal {
 			gunluk.Yaz("kurulum tamamlanmadı, çıkılıyor")
 			return
-		case kurulumDevredildi:
-			gunluk.Yaz("kurulum tamam; kurulu kopya devraldı, bu süreç çıkıyor")
-			return
 		}
-	} else if bayrakVar(durumAcArg) {
-		// Devralan kopya: kullanıcı az önce exe'ye tıkladı → durum penceresi geri bildirimi.
-		durumPenceresiniAc()
 	}
 
 	ajan = kopru.Yeni(istemci, yazdir.Bas, kesif.Bul, Surum, durum)
@@ -118,18 +105,16 @@ func main() {
 type kurulumSonuc int
 
 const (
-	kurulumIptal      kurulumSonuc = iota // kullanıcı vazgeçti → çık
-	kurulumDevam                          // eşleşti; bu süreç ajan olarak devam eder
-	kurulumDevredildi                     // eşleşti; kurulu kopya başlatıldı → bu süreç çıkar
+	kurulumIptal kurulumSonuc = iota // kullanıcı vazgeçti → çık
+	kurulumDevam                     // eşleşti; bu süreç ajan olarak devam eder
 )
 
 // ilkKurulum — 6 haneli kurulum kodunu, WebView penceresinde açılan gömülü
 // bir sihirbaz sayfasında sorar (v0.4.0: zenity.Entry'nin yerini alır — eski
 // diyaloğun metni "Kuruluma hoş geldiniz!1) Hizmetra Panel'i a…" gibi
 // OKUNAMAYACAK KADAR kırpılıyordu, emre 2026-08-16 ekran görüntüsü kanıtlı).
-// Eşleşme sonrası adımlar (kayıt, kurulu konuma kopyalama, durum penceresine
-// geçiş) AYNI kalır (bkz. kurulumTamamlandi) — yalnız kodun NEREDEN geldiği
-// değişti.
+// Eşleşme sonrası adımlar (kayıt, durum penceresine geçiş) AYNI kalır (bkz.
+// kurulumTamamlandi) — yalnız kodun NEREDEN geldiği değişti.
 func ilkKurulum() kurulumSonuc {
 	makineAdi, _ := os.Hostname()
 	sihirbaz := kurulum.Yeni(Surum, panodanKodOner(), func(kod string) (*api.EslestirCevap, string, error) {
@@ -179,12 +164,16 @@ func ilkKurulum() kurulumSonuc {
 	}
 }
 
-// kurulumTamamlandi — eşleşme başarılı olduktan SONRAKİ adımlar (v0.2.0'dan
-// beri değişmeyen kısım): ayarı kaydet, kurulu konuma kopyala + Run anahtarını
-// kur, gerekiyorsa kurulu kopyaya devret, durum penceresine geç. sayfa.html
-// zaten "Bağlandı: {işletme}" ekranını gösterdi; kullanıcı bunu okusun diye
-// kısa bir bekleme payı bırakılır (eski zenity.Info diyaloğunun yerini alır —
-// artık pencere İÇİNDE, ayrı bir OS diyaloğu YOK).
+// kurulumTamamlandi — eşleşme başarılı olduktan SONRAKİ adımlar: ayarı
+// kaydet, durum penceresine geç. sayfa.html zaten "Bağlandı: {işletme}"
+// ekranını gösterdi; kullanıcı bunu okusun diye kısa bir bekleme payı
+// bırakılır (eski zenity.Info diyaloğunun yerini alır — artık pencere
+// İÇİNDE, ayrı bir OS diyaloğu YOK).
+//
+// v0.4.0: kurulu konuma kopyalama + Run anahtarı kurma + gerekiyorsa kurulu
+// kopyaya devretme adımları BURADAN KALKTI — Inno Setup installer sabit bir
+// konuma kurar ve kendi autostart/Uninstall kaydını sağlar (bkz. plan Track
+// C4); bu exe artık "nerede kurulu olduğumu" hiç bilmez/yönetmez.
 func kurulumTamamlandi(es kurulum.EslesmeSonucu, makineAdi string) kurulumSonuc {
 	// Kazanan sunucuya kilitlen: nabız/işler bundan sonra hep oraya gider.
 	istemci = api.New(es.Sunucu)
@@ -198,104 +187,9 @@ func kurulumTamamlandi(es kurulum.EslesmeSonucu, makineAdi string) kurulumSonuc 
 	}
 	gunluk.Yaz("eşleşme başarılı: işletme=%s cihaz=%d", es.Cevap.IsletmeAd, es.Cevap.CihazID)
 
-	// Kendini kurulu konuma kopyala; Run anahtarı KOPYALANAN yola yazılır
-	// (İndirilenler yolu değil — kullanıcı indirdiği dosyayı silince otomatik
-	// başlatma kırılmasın).
-	kuruluYolu, kopyalandi := kuruluKopyayaKur()
 	time.Sleep(2 * time.Second) // sayfadaki "Bağlandı" ekranını okuyacak süre
-	// Başka yoldan (İndirilenler) açıldıysak kurulu kopyaya devret: durum
-	// penceresini o açar (--durum-ac). Devredilemezse buradan devam.
-	if kopyalandi && kuruluKopyayiBaslat(kuruluYolu, durumAcArg) {
-		return kurulumDevredildi
-	}
 	durumPenceresiniAc()
 	return kurulumDevam
-}
-
-// Kurulu-kopya diyaloğu seçenekleri (zenity.List satırları).
-const (
-	secimGuncelle = "Güncelle (yeni sürümü kur)"
-	secimOnar     = "Onar (yeniden eşleştir)"
-	secimKaldir   = "Kaldır (bu bilgisayardan)"
-)
-
-// kuruluSecimi — kilit tutuluyken (kurulu kopya çalışıyor) ne yapılacağını
-// sorar. Vazgeç/kapat → "".
-func kuruluSecimi() string {
-	s, err := zenity.List(
-		"Zaten çalışıyor. Ne yapalım?",
-		[]string{secimGuncelle, secimOnar, secimKaldir},
-		zenity.Title("Hizmetra Yazıcı "+Surum),
-		zenity.OKLabel("Tamam"), zenity.CancelLabel("Vazgeç"),
-		zenity.DefaultItems(secimGuncelle), zenity.DisallowEmpty(),
-	)
-	if err != nil {
-		return ""
-	}
-	return s
-}
-
-// kuruluAkisi — kurulu kopya çalışırken bu exe açıldı (yeni sürüm indirildi ya
-// da kullanıcı sorun yaşıyor). Seçim:
-//   - Güncelle: çalışanı kapat → kendini kurulu konuma kopyala → Run anahtarı →
-//     yeni yoldan başlat → çık. (Zaten kurulu yoldaysak: buradan devam.)
-//   - Onar: çalışanı kapat → config sil → normal akış ilkKurulum'a düşer.
-//   - Kaldır: çalışanı kapat → Run anahtarı sil → config sil → kurulu exe'yi
-//     sil (kendimiz değilse) → bilgi → çık.
-//
-// true → çağıran normal başlangıçla DEVAM etsin (kilit artık bizde).
-func kuruluAkisi() bool {
-	secim := kuruluSecimi()
-	gunluk.Yaz("kurulu kopya çalışıyor; seçim: %q (sürüm %s)", secim, Surum)
-	switch secim {
-	case secimGuncelle, secimOnar, secimKaldir:
-	default:
-		return false
-	}
-
-	// Üç seçenek de önce çalışan kopyayı kapatır ve tek-kopya kilidini devralır.
-	if err := calisanKopyayiKapat(); err != nil {
-		gunluk.Yaz("çalışan kopya kapatılamadı: %v", err)
-	}
-	if !tekKopyaKilidiBekle(5 * time.Second) {
-		gunluk.Yaz("kilit devralınamadı (çalışan kopya hâlâ ayakta)")
-		_ = zenity.Error("Çalışan kopya kapatılamadı.\n\nSaat yanındaki simgeden Çıkış yapıp tekrar deneyin.",
-			zenity.Title("Hizmetra Yazıcı"))
-		return false
-	}
-
-	switch secim {
-	case secimGuncelle:
-		if kuruluKopyayaDevret(durumAcArg) {
-			gunluk.Yaz("güncelleme: kurulu kopya başlatıldı, bu süreç çıkıyor")
-			return false
-		}
-		return true // zaten kurulu yoldayız (veya kopyalanamadı): yeni sürüm olarak buradan devam
-	case secimOnar:
-		if err := ayar.Sil(); err != nil {
-			gunluk.Yaz("ayar silinemedi: %v", err)
-		}
-		return true // token yok → ilkKurulum (yeniden eşleştirme)
-	default: // secimKaldir
-		if err := otomatikBaslatKaldir(); err != nil {
-			gunluk.Yaz("otomatik başlatma kaldırılamadı: %v", err)
-		}
-		if err := ayar.Sil(); err != nil {
-			gunluk.Yaz("ayar silinemedi: %v", err)
-		}
-		exeSilindi := kuruluKopyayiSil()
-		mesaj := "Hizmetra Yazıcı bu bilgisayardan kaldırıldı.\n\n" +
-			"• Otomatik başlatma kapatıldı\n" +
-			"• Bağlantı anahtarı silindi\n\n" +
-			"Panelde de bu bilgisayarı kaldırın:\nYazıcılar → Bilgisayar Programı → Kaldır"
-		if !exeSilindi { // kurulu exe biziz (çalışan dosya silinemez) → kullanıcı silsin
-			if kendi, err := os.Executable(); err == nil {
-				mesaj += "\n\nProgram dosyasını kapandıktan sonra silebilirsiniz:\n" + kendi
-			}
-		}
-		_ = zenity.Info(mesaj, zenity.Title("Hizmetra Yazıcı — Kaldırıldı"))
-		return false
-	}
 }
 
 // eslestirmeDene — kurulum kodunu bilinen sunucularda (ayar.SunucuAdaylari)
@@ -445,15 +339,65 @@ func kisalt(s string, n int) string {
 // baslatDurumSunucusu — yerel durum penceresi sunucusunu (127.0.0.1) açar ve
 // açılacak token'lı adresi durumURL'e koyar. Başarısız olursa ajan çalışmaya
 // devam eder; yalnız "Durumu Göster" işlevsiz kalır.
+//
+// v0.4.0: sunucunun bağlandığı port + loopback token'ı ayar.Kaydet ile diske
+// yazılır — aynı bilgisayarda açılan ikinci bir kopya (tek-kopya kilidini
+// alamayan) buradan çalışan kopyanın /odaklan ucuna ulaşır (bkz.
+// digerKopyayaOdaklanDene). Kayıt başarısız olsa da ajan çalışmaya devam eder;
+// yalnız ikinci kopyanın "öne getir" sinyali işe yaramaz (sessizce çıkar).
 func baslatDurumSunucusu() {
-	s := durumsrv.Yeni("Hizmetra Yazıcı", Surum, ozetTopla, gunluk.SonSatirlar)
-	u, err := s.Baslat()
+	s := durumsrv.Yeni("Hizmetra Yazıcı", Surum, ozetTopla, gunluk.SonSatirlar, odaklanGeldi)
+	u, port, err := s.Baslat()
 	if err != nil {
 		gunluk.Yaz("durum penceresi başlatılamadı: %v", err)
 		return
 	}
 	durumURL = u
+	yapilandirma.SonBilinenPort = port
+	yapilandirma.SonBilinenToken = s.Token
+	if err := ayar.Kaydet(yapilandirma); err != nil {
+		gunluk.Yaz("durum sunucusu adresi kaydedilemedi: %v", err)
+	}
 	gunluk.Yaz("durum penceresi yerelde hazır") // token'lı URL LOGLANMAZ (gizlilik)
+}
+
+// odaklanGeldi — durum sunucusunun /odaklan ucuna POST geldiğinde (aynı
+// bilgisayarda ikinci bir kopya açılmaya çalışıldı, bkz. digerKopyayaOdaklanDene)
+// tetiklenir: açık bir durum penceresi varsa öne getirir; pencere kapalıysa
+// (ajan sessizce tepside çalışıyordu) normal açılıştaki gibi açar — Start Menu
+// kısayoluna tekrar tıklamak HER ZAMAN uygulamayı görünür kılar, eski "zaten
+// çalışıyor" sorusunu SORMAZ.
+func odaklanGeldi() {
+	gunluk.Yaz("/odaklan alındı: pencere öne getiriliyor")
+	if err := pencere.OneGetir(); err != nil {
+		gunluk.Yaz("açık pencere yok (%v), durum penceresi açılıyor", err)
+		durumPenceresiniAc()
+	}
+}
+
+// digerKopyayaOdaklanDene — tek-kopya kilidi alınamadı: başka bir kopya zaten
+// çalışıyor demektir. v0.4.0: eski "Zaten çalışıyor. Ne yapalım?" zenity
+// diyaloğu YOK artık — kayıtlı porttan/token'dan çalışan kopyanın durum
+// sunucusuna POST /odaklan denenir (kısa zaman aşımı: kafede kasiyer
+// beklerken donmasın). Başarılı da olsa (öne getirildi) başarısız da olsa
+// (port değişmiş, çalışan kopya port kaydetmeden çökmüş — nadir kenar durum)
+// bu süreç SESSİZCE çıkar: kilit zaten başkasında, zorlamaya/eski mesajı
+// göstermeye gerek yok.
+func digerKopyayaOdaklanDene() {
+	a, err := ayar.Yukle()
+	if err != nil || a.SonBilinenPort == 0 || a.SonBilinenToken == "" {
+		gunluk.Yaz("çalışan kopyanın adresi bilinmiyor, sessizce çıkılıyor")
+		return
+	}
+	istemciHTTP := http.Client{Timeout: 1 * time.Second}
+	adres := fmt.Sprintf("http://127.0.0.1:%d/odaklan?t=%s", a.SonBilinenPort, a.SonBilinenToken)
+	r, err := istemciHTTP.Post(adres, "", nil)
+	if err != nil {
+		gunluk.Yaz("çalışan kopyaya ulaşılamadı, sessizce çıkılıyor: %v", err)
+		return
+	}
+	_ = r.Body.Close()
+	gunluk.Yaz("çalışan kopya öne getirildi (durum %d)", r.StatusCode)
 }
 
 // ozetTopla — durum penceresinin gösterdiği anlık özeti globallerden derler.
