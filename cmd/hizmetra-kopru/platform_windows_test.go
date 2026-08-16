@@ -43,27 +43,6 @@ func TestTekKopyaKilidiSemantigi(t *testing.T) {
 	}
 }
 
-// TestOtomatikBaslatKurKaldir — Run değeri verilen yola tırnaklı yazılır,
-// Kaldır siler, ikinci Kaldır hata vermez. Teste özel değer adı kullanılır.
-func TestOtomatikBaslatKurKaldir(t *testing.T) {
-	eskiAd := autostartAd
-	autostartAd = fmt.Sprintf("HizmetraKopruTest%d", os.Getpid())
-	defer func() { _ = otomatikBaslatKaldir(); autostartAd = eskiAd }()
-
-	yol := `C:\Users\Test\AppData\Local\HizmetraKopru\hizmetra-kopru.exe`
-	if err := otomatikBaslatKur(yol); err != nil {
-		t.Fatal(err)
-	}
-	if got := otomatikBaslatYolu(); got != `"`+yol+`"` {
-		t.Fatalf("Run değeri %q, beklenen tırnaklı yol", got)
-	}
-	if err := otomatikBaslatKaldir(); err != nil {
-		t.Fatal(err)
-	}
-	if got := otomatikBaslatYolu(); got != "" {
-		t.Fatalf("Kaldır sonrası değer kalmamalı: %q", got)
-	}
-	if err := otomatikBaslatKaldir(); err != nil {
-		t.Fatalf("değer yokken Kaldır hata vermemeli: %v", err)
-	}
-}
+// v0.4.0: TestOtomatikBaslatKurKaldir KALDIRILDI — otomatikBaslatKur/Kaldir/Yolu
+// artık yok (autostart Inno Setup installer'ın [Registry] girdisine devredildi,
+// bkz. platform_windows.go ve installer/hizmetra-yazici.iss).

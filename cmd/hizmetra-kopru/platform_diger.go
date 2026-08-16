@@ -11,9 +11,3 @@ func tekKopyaKilidi() bool { return true }
 func tekKopyaKilidiBirak() {}
 
 func tekKopyaKilidiBekle(time.Duration) bool { return true }
-
-func otomatikBaslatKur(string) error { return nil }
-
-func otomatikBaslatKaldir() error { return nil }
-
-func otomatikBaslatYolu() string { return "" }

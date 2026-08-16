@@ -44,6 +44,15 @@ var (
 )
 
 func main() {
+	// "--kaldir-sunucu": Inno Setup installer'ın [UninstallRun] adımı çağırır
+	// (dosyalar silinmeden HEMEN ÖNCE). Mutex/pencere/tray mantığından ÖNCE
+	// kontrol edilir ki kaldırma sırasında tepsi ikonu/pencere HİÇ açılmasın —
+	// bkz. kurulum.go:kaldirSunucudanCihazi (sessiz, hızlı, her hatayı yutar).
+	if bayrakVar("--kaldir-sunucu") {
+		kaldirSunucudanCihazi()
+		os.Exit(0)
+	}
+
 	dizin, err := ayar.Dizin()
 	if err != nil {
 		_ = zenity.Error("Ayar klasörü oluşturulamadı: "+err.Error(), zenity.Title("Hizmetra Yazıcı"))

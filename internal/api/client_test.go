@@ -186,3 +186,50 @@ func TestSonucBildirBosListeIstekAtmaz(t *testing.T) {
 		t.Error("boş sonuç listesi için sunucuya istek atılmamalı")
 	}
 }
+
+func TestKaldirBasarili(t *testing.T) {
+	var gorulenYol, gorulenMetot, gorulenToken string
+	c := sunucuKur(t, func(w http.ResponseWriter, r *http.Request) {
+		gorulenYol = r.URL.Path
+		gorulenMetot = r.Method
+		gorulenToken = r.Header.Get("X-Kopru-Token")
+		zarfYaz(w, 200, true, nil, "Cihaz kaydı silindi")
+	})
+	c.Token = "k1-0-x"
+	if err := c.Kaldir(); err != nil {
+		t.Fatalf("beklenmeyen hata: %v", err)
+	}
+	if gorulenYol != "/api/kopru/kaldir" || gorulenMetot != http.MethodPost {
+		t.Errorf("beklenmeyen istek: %s %s", gorulenMetot, gorulenYol)
+	}
+	if gorulenToken != "k1-0-x" {
+		t.Errorf("X-Kopru-Token gönderilmedi: %q", gorulenToken)
+	}
+}
+
+func TestKaldirYetkisiz401(t *testing.T) {
+	c := sunucuKur(t, func(w http.ResponseWriter, r *http.Request) {
+		zarfYaz(w, 401, false, nil, "Yetkisiz")
+	})
+	c.Token = "k1-0-iptal"
+	if err := c.Kaldir(); err != ErrYetkisiz {
+		t.Fatalf("ErrYetkisiz bekleniyordu, gelen: %v", err)
+	}
+}
+
+// TestKaldir404UcYok — production'da (api.hizmetra.com) bu uç henüz yayında
+// olmayabilir (main branch'e gitmedi). Canlı doğrulandı: uygulama genelindeki
+// 404 handler'ı da api_response zarfı döner ({success:false,message:"Kaynak
+// bulunamadı."}), düz HTML DEĞİL — bu yüzden burada da AYNI zarf taklit
+// edilir. İstemci bunu ErrKodGecersiz'e çevirir (anlamca "kaldırma" ile
+// örtüşmese de, o eşleme `istek()`'te uç-bağımsız) — kaldirSunucudanCihazi
+// hangi sentinel döndüğüne bakmaksızın HER hatayı sessizce yutar.
+func TestKaldir404UcYok(t *testing.T) {
+	c := sunucuKur(t, func(w http.ResponseWriter, r *http.Request) {
+		zarfYaz(w, 404, false, nil, "Kaynak bulunamadı.")
+	})
+	c.Token = "k1-0-x"
+	if err := c.Kaldir(); err == nil {
+		t.Fatal("uç yokken (404) bir hata dönmeli")
+	}
+}

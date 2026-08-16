@@ -37,3 +37,33 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # SignPath onayı gelince buraya imzalama adımı eklenecek:
       # - uses: signpath/github-action-submit-signing-request@v1
+
+  # Inno Setup installer (Task C4). AYRI job + windows-latest ZORUNLU: goreleaser
+  # yukarıda ubuntu-latest'te CROSS-COMPILE ediyor (CGO_ENABLED=0, GOOS=windows) —
+  # iscc.exe Windows-only olduğu için aynı job'da çalışamaz. goreleaser'ın az önce
+  # yayınladığı release'den ham hizmetra-kopru.exe'yi indirip installer'a gömer,
+  # sonucu AYNI release'e ikinci bir asset olarak yükler (ham exe de KALIR).
+  installer:
+    name: Inno Setup installer
+    needs: goreleaser
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inno Setup kur (chocolatey ön-kurulu)
+        run: choco install innosetup -y --no-progress
+
+      - name: goreleaser'ın yayınladığı hizmetra-kopru.exe'yi indir
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "${{ github.ref_name }}" --repo "${{ github.repository }}" --pattern "hizmetra-kopru.exe" --dir installer --clobber
+
+      - name: Installer derle (iscc — sürüm etiketten /D ile geçer)
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v', ''
+          iscc "/DMyAppVersion=$ver" installer\hizmetra-yazici.iss
+
+      - name: Installer'ı release asset'i olarak yükle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" "installer\Output\HizmetraYaziciKurulum.exe" --repo "${{ github.repository }}" --clobber

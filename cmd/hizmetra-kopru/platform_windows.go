@@ -7,17 +7,12 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
-	"golang.org/x/sys/windows/registry"
 )
 
-// TEKNİK KİMLİK — görünen ad "Hizmetra Yazıcı" olsa da bunlar DEĞİŞMEZ:
-// eski kurulumla (v0.1/v0.2) çakışmayı yakalamak ve aynı Run anahtarını
-// güncellemek için birebir aynı kalmalı. (Testler izole ad verebilsin diye var.)
-var (
-	mutexAdi         = "Global\\HizmetraKopruTekKopya"
-	autostartAnahtar = `Software\Microsoft\Windows\CurrentVersion\Run`
-	autostartAd      = "HizmetraKopru"
-)
+// TEKNİK KİMLİK — görünen ad "Hizmetra Yazıcı" olsa da bu DEĞİŞMEZ: eski
+// kurulumla (v0.1/v0.2/v0.3) çakışmayı yakalamak için birebir aynı kalmalı.
+// (Test izole ad verebilsin diye değişken.)
+var mutexAdi = "Global\\HizmetraKopruTekKopya"
 
 // kilitTutamak — tekKopyaKilidi'nin SAHİBİ olduğumuz mutex tutamağı (0 = yok).
 var kilitTutamak windows.Handle
@@ -74,51 +69,8 @@ func tekKopyaKilidiBekle(sure time.Duration) bool {
 	}
 }
 
-// otomatikBaslatKur — HKCU\...\Run anahtarına verilen yolu yazar.
-//
-// Windows SERVİSİ olarak kurulmuyor: servisler oturum-0 izolasyonundadır ve
-// sistem tepsisinde simge GÖSTEREMEZ. Kafede PC'yi kasiyer açıyor, yani
-// kullanıcı oturumu daima var — Run anahtarı hem yeterli hem yönetici hakkı
-// istemiyor (kurulum 3 dakikada bitsin diye).
-//
-// v0.3.0: yol parametre — çağıran KURULU kopyanın yolunu verir
-// (%LOCALAPPDATA%\HizmetraKopru\hizmetra-kopru.exe), İndirilenler yolunu değil.
-func otomatikBaslatKur(yol string) error {
-	k, _, err := registry.CreateKey(registry.CURRENT_USER, autostartAnahtar, registry.SET_VALUE)
-	if err != nil {
-		return err
-	}
-	defer k.Close()
-	return k.SetStringValue(autostartAd, `"`+yol+`"`)
-}
-
-// otomatikBaslatKaldir — Run anahtarındaki değeri siler ("Kaldır"). Değer ya da
-// anahtar yoksa hata DÖNMEZ (idempotent).
-func otomatikBaslatKaldir() error {
-	k, err := registry.OpenKey(registry.CURRENT_USER, autostartAnahtar, registry.SET_VALUE)
-	if err != nil {
-		if errors.Is(err, registry.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	defer k.Close()
-	if err := k.DeleteValue(autostartAd); err != nil && !errors.Is(err, registry.ErrNotExist) {
-		return err
-	}
-	return nil
-}
-
-// otomatikBaslatYolu — Run anahtarındaki mevcut değer (test/teşhis). Yoksa "".
-func otomatikBaslatYolu() string {
-	k, err := registry.OpenKey(registry.CURRENT_USER, autostartAnahtar, registry.QUERY_VALUE)
-	if err != nil {
-		return ""
-	}
-	defer k.Close()
-	v, _, err := k.GetStringValue(autostartAd)
-	if err != nil {
-		return ""
-	}
-	return v
-}
+// v0.4.0: otomatikBaslatKur/otomatikBaslatKaldir/otomatikBaslatYolu (HKCU Run
+// anahtarı) BURADAN KALDIRILDI — Inno Setup installer'ın [Registry] girdisi
+// aynı deseni ("HizmetraYazici" adıyla, tırnaklı exe yolu) artık kendisi
+// yazıyor/kaldırıyor (bkz. installer/hizmetra-yazici.iss, plan Track C4).
+// Autostart tamamen installer'ın sorumluluğu.

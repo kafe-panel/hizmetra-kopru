@@ -223,3 +223,14 @@ func (c *Client) Surum() (*SurumBilgi, error) {
 	}
 	return &bilgi, nil
 }
+
+// Kaldir — POST /api/kopru/kaldir (X-Kopru-Token). Installer'ın kaldırma
+// akışı ("--kaldir-sunucu", bkz. cmd/hizmetra-kopru/kurulum.go) çağırır:
+// sunucudaki cihaz kaydını siler ve token'ı geçersiz kılar — kullanıcı
+// panelden elle silmek zorunda kalmaz. Gövde yok, cevap gövdesi kullanılmaz;
+// `istek` zaten 401'i ErrYetkisiz'e çevirir. Çağıran taraf HER hatayı
+// (401, 404 — ör. bu uç henüz yayında olmayan bir sunucuda, bağlantı hatası…)
+// sessizce yutar; burada özel bir dal YOKTUR.
+func (c *Client) Kaldir() error {
+	return c.istek(http.MethodPost, "/api/kopru/kaldir", nil, nil, 15*time.Second)
+}
