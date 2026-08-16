@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Hizmetra Yazıcı — Kurulum</title>
+<style>
+  :root {
+    --zemin: #f4f6f9;
+    --yuzey: #ffffff;
+    --cizgi: #e5e7eb;
+    --metin: #0f172a;
+    --metin-2: #64748b;
+    --metin-3: #94a3b8;
+    --teal: #0d9488;
+    --teal-2: #0f766e;
+    --kirmizi: #ef4444;
+    --kirmizi-zemin: #fef2f2;
+    --yesil-zemin: #ecfdf5;
+    --yesil-metin: #047857;
+    --golge: 0 1px 2px rgba(15,23,42,.04), 0 2px 8px rgba(15,23,42,.05);
+    --logo-chip: #ffffff;
+  }
+  :root { color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --zemin: #0b1220;
+      --yuzey: #141d2e;
+      --cizgi: #26324a;
+      --metin: #e7edf7;
+      --metin-2: #97a6be;
+      --metin-3: #6b7c98;
+      --teal: #2dd4bf;
+      --teal-2: #14b8a6;
+      --kirmizi: #f87171;
+      --kirmizi-zemin: #2a1416;
+      --yesil-zemin: #0f2b22;
+      --yesil-metin: #34d399;
+      --golge: 0 1px 2px rgba(0,0,0,.3), 0 2px 10px rgba(0,0,0,.35);
+      --logo-chip: #ffffff;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--zemin);
+    color: var(--metin);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100%;
+    padding: 20px;
+    overflow-y: auto;
+  }
+
+  .kart {
+    background: var(--yuzey);
+    border: 1px solid var(--cizgi);
+    border-radius: 16px;
+    box-shadow: var(--golge);
+    padding: 26px 28px 24px;
+    width: 100%;
+    max-width: 400px;
+  }
+
+  .logo-chip {
+    background: var(--logo-chip);
+    border: 1px solid var(--cizgi);
+    border-radius: 10px;
+    padding: 7px 12px;
+    display: inline-flex; align-items: center;
+    box-shadow: var(--golge);
+    margin-bottom: 16px;
+  }
+  .logo-chip img { display: block; height: 24px; width: auto; }
+
+  h1 { font-size: 25px; font-weight: 680; letter-spacing: -.015em; margin: 0 0 6px; }
+  .serit-alt-kucuk { font-size: 11.5px; color: var(--metin-3); margin: 0 0 18px; }
+  .alt-metin { font-size: 13.5px; color: var(--metin-2); margin: 0 0 16px; }
+
+  .adimlar { margin: 0 0 22px; padding: 0; list-style: none; counter-reset: adim; }
+  .adimlar li {
+    counter-increment: adim;
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 7px 0;
+    font-size: 13.5px;
+  }
+  .adimlar li::before {
+    content: counter(adim);
+    flex: 0 0 auto;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--teal); color: #fff;
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
+  }
+
+  .etiket { display: block; font-size: 12px; font-weight: 650; color: var(--metin-2); margin-bottom: 8px; }
+  .kod-input {
+    display: block;
+    width: 100%;
+    font-size: 30px;
+    font-weight: 650;
+    letter-spacing: .28em;
+    text-align: center;
+    font-family: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+    padding: 12px 8px 12px 16px; /* letter-spacing kaydırmasını dengelemek için sol pay biraz fazla */
+    border-radius: 10px;
+    border: 1.5px solid var(--cizgi);
+    background: var(--zemin);
+    color: var(--metin);
+    margin-bottom: 14px;
+  }
+  .kod-input:focus { outline: none; border-color: var(--teal); }
+
+  .dugme {
+    width: 100%;
+    background: var(--teal); color: #fff;
+    border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 640;
+    padding: 12px 16px;
+    cursor: pointer;
+    box-shadow: var(--golge);
+    transition: background .15s, opacity .15s;
+  }
+  .dugme:hover:not(:disabled) { background: var(--teal-2); }
+  .dugme:disabled { opacity: .6; cursor: default; }
+
+  .dugme-ikincil {
+    width: 100%;
+    background: transparent; color: var(--metin);
+    border: 1.5px solid var(--cizgi); border-radius: 10px;
+    font-size: 13.5px; font-weight: 600;
+    padding: 9px 16px;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+  .dugme-ikincil:hover { background: var(--zemin); }
+
+  .hata-kutusu {
+    margin-top: 14px;
+    background: var(--kirmizi-zemin);
+    border: 1px solid var(--kirmizi);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .hata-kutusu #hataMetin { color: var(--kirmizi); font-size: 13px; line-height: 1.5; }
+
+  .kosullar { font-size: 11.5px; color: var(--metin-3); margin: 16px 0 0; text-align: center; }
+
+  .basari-simge {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--yesil-zemin); color: var(--yesil-metin);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; font-weight: 700;
+    margin: 0 auto 16px;
+  }
+  #kartBasarili { text-align: center; }
+  #kartBasarili .alt-metin { margin-bottom: 0; }
+</style>
+</head>
+<body>
+  <div class="kart" id="kartForm">
+    <div class="logo-chip"><img src="{{.LogoURI}}" alt="Hizmetra"></div>
+    <h1>Hoş geldiniz</h1>
+    <p class="serit-alt-kucuk">Hizmetra Yazıcı — Kurulum · v{{.Surum}}</p>
+    <p class="alt-metin">Fiş yazıcınızı Hizmetra Panel'e bağlamak için:</p>
+    <ol class="adimlar">
+      <li>Hizmetra Panel'i açın</li>
+      <li>Ayarlar → Yazıcılar → Bilgisayar Programı</li>
+      <li>"Kurulum Kodu Üret"e basın</li>
+    </ol>
+    <label class="etiket" for="kod">Paneldeki 6 haneli kod</label>
+    <input id="kod" class="kod-input" type="text" inputmode="numeric" pattern="[0-9]*"
+           maxlength="6" autocomplete="off" spellcheck="false" autofocus>
+    <button id="btnBaglan" class="dugme">Bağlan</button>
+    <div id="hataKutusu" class="hata-kutusu" hidden>
+      <div id="hataMetin"></div>
+      <button id="btnTekrar" class="dugme-ikincil">Tekrar dene</button>
+    </div>
+    <p class="kosullar">Devam ederek Kullanım Koşulları'nı kabul etmiş olursunuz:<br>github.com/kafe-panel/hizmetra-kopru/blob/main/KULLANIM.md</p>
+  </div>
+
+  <div class="kart" id="kartBasarili" hidden>
+    <div class="basari-simge">✓</div>
+    <h1 id="basariBaslik">Bağlandı</h1>
+    <p id="basariAlt" class="alt-metin"></p>
+  </div>
+
+<script>
+const KOD_ONERI = "{{.KodOneri}}";
+
+var girdi = document.getElementById("kod");
+if (/^\d{6}$/.test(KOD_ONERI)) girdi.value = KOD_ONERI;
+
+var btn = document.getElementById("btnBaglan");
+var hataKutusu = document.getElementById("hataKutusu");
+var hataMetin = document.getElementById("hataMetin");
+var btnTekrar = document.getElementById("btnTekrar");
+var kartForm = document.getElementById("kartForm");
+var kartBasarili = document.getElementById("kartBasarili");
+
+function hataGoster(msg) {
+  hataMetin.textContent = msg;
+  hataKutusu.hidden = false;
+  btn.disabled = false;
+  btn.textContent = "Bağlan";
+}
+
+function gonder() {
+  var kod = girdi.value.replace(/\s+/g, "");
+  if (!/^\d{6}$/.test(kod)) {
+    hataGoster("Kod 6 haneli olmalı.");
+    return;
+  }
+  hataKutusu.hidden = true;
+  btn.disabled = true;
+  btn.textContent = "Bağlanıyor…";
+  fetch("/eslestir-dene", { method: "POST", body: kod })
+    .then(function (r) { return r.json(); })
+    .then(function (v) {
+      if (v.basarili) {
+        kartForm.hidden = true;
+        kartBasarili.hidden = false;
+        document.getElementById("basariBaslik").textContent = "Bağlandı: " + v.isletme_ad;
+        document.getElementById("basariAlt").textContent =
+          "Bilgisayar açıldığında program kendiliğinden çalışacak. Birazdan durum penceresine yönlendirileceksiniz…";
+      } else {
+        hataGoster(v.hata || "Bilinmeyen hata.");
+      }
+    })
+    .catch(function () {
+      hataGoster("Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.");
+    });
+}
+
+btn.addEventListener("click", gonder);
+btnTekrar.addEventListener("click", function () { hataKutusu.hidden = true; });
+girdi.addEventListener("keydown", function (e) { if (e.key === "Enter") gonder(); });
+girdi.addEventListener("input", function () {
+  girdi.value = girdi.value.replace(/[^0-9]/g, "").slice(0, 6);
+});
+</script>
+</body>
+</html>

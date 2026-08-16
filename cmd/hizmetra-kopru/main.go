@@ -25,6 +25,7 @@ import (
 	"github.com/kafe-panel/hizmetra-kopru/internal/gunluk"
 	"github.com/kafe-panel/hizmetra-kopru/internal/kesif"
 	"github.com/kafe-panel/hizmetra-kopru/internal/kopru"
+	"github.com/kafe-panel/hizmetra-kopru/internal/kurulum"
 	"github.com/kafe-panel/hizmetra-kopru/internal/pencere"
 	"github.com/kafe-panel/hizmetra-kopru/internal/yazdir"
 )
@@ -122,78 +123,93 @@ const (
 	kurulumDevredildi                     // eşleşti; kurulu kopya başlatıldı → bu süreç çıkar
 )
 
-// ilkKurulum — 6 haneli kodu sorar, eşleşir, token'ı kaydeder, kendini kurulu
-// konuma kopyalar, autostart'ı KOPYALANAN yola kurar ve (başka yoldan
-// açıldıysa) kurulu kopyaya devreder.
+// ilkKurulum — 6 haneli kurulum kodunu, WebView penceresinde açılan gömülü
+// bir sihirbaz sayfasında sorar (v0.4.0: zenity.Entry'nin yerini alır — eski
+// diyaloğun metni "Kuruluma hoş geldiniz!1) Hizmetra Panel'i a…" gibi
+// OKUNAMAYACAK KADAR kırpılıyordu, emre 2026-08-16 ekran görüntüsü kanıtlı).
+// Eşleşme sonrası adımlar (kayıt, kurulu konuma kopyalama, durum penceresine
+// geçiş) AYNI kalır (bkz. kurulumTamamlandi) — yalnız kodun NEREDEN geldiği
+// değişti.
 func ilkKurulum() kurulumSonuc {
-	for {
-		// Çok satırlı metin: Windows diyaloğu tek uzun satırı kırpıyordu ("Bil..." kesiği).
-		kod, err := zenity.Entry(
-			"Kuruluma hoş geldiniz!\n\n"+
-				"1) Hizmetra Panel'i açın\n"+
-				"2) Ayarlar → Yazıcılar → Bilgisayar Programı\n"+
-				"3) \"Kurulum Kodu Üret\"e basın\n\n"+
-				"Paneldeki 6 haneli kodu aşağıya yazın:\n\n"+
-				"Devam ederek Kullanım Koşulları'nı kabul etmiş olursunuz:\n"+
-				"github.com/kafe-panel/hizmetra-kopru/blob/main/KULLANIM.md",
-			zenity.Title("Hizmetra Yazıcı — Kurulum"),
-			zenity.EntryText(panodanKodOner()),
-		)
-		if err != nil { // kullanıcı iptal etti
-			return kurulumIptal
-		}
-		kod = strings.TrimSpace(kod)
-		if len(kod) != 6 {
-			_ = zenity.Warning("Kod 6 haneli olmalı.", zenity.Title("Hizmetra Yazıcı"))
-			continue
-		}
-
-		makineAdi, _ := os.Hostname()
+	makineAdi, _ := os.Hostname()
+	sihirbaz := kurulum.Yeni(Surum, panodanKodOner(), func(kod string) (*api.EslestirCevap, string, error) {
 		// TEK exe hem staging hem production'a bağlanabilsin diye kodu bilinen
 		// sunucuların HEPSİNDE dene; KABUL eden (token dönen) sunucuyu kullan.
-		cevap, sunucu, err := eslestirmeDene(kod, makineAdi)
-		if err != nil {
-			gunluk.Yaz("eşleştirme başarısız: %v", err)
-			mesaj := "Kod geçersiz veya süresi dolmuş.\nPanelden yeni kod alıp tekrar deneyin."
-			if err != api.ErrKodGecersiz {
-				mesaj = "Sunucuya ulaşılamadı:\n" + err.Error() + "\n\nİnternet bağlantınızı kontrol edin."
-			}
-			if zenity.Question(mesaj+"\n\nTekrar denemek ister misiniz?",
-				zenity.Title("Hizmetra Yazıcı"), zenity.OKLabel("Tekrar dene"), zenity.CancelLabel("Çık")) != nil {
+		return eslestirmeDene(kod, makineAdi)
+	})
+	kurulumURL, err := sihirbaz.Baslat()
+	if err != nil {
+		gunluk.Yaz("kurulum sihirbazı başlatılamadı: %v", err)
+		_ = zenity.Error("Kurulum ekranı başlatılamadı: "+err.Error(), zenity.Title("Hizmetra Yazıcı"))
+		return kurulumIptal
+	}
+
+	// WebView açılamazsa (WebView2 Runtime kurulu değil vb.) TEK düşüş dalı:
+	// sistem tarayıcısı — durumPenceresiniAc ile AYNI desen. Bu yolda "pencere
+	// kapatıldı" algılaması YOK (aşağıya bkz.): tarayıcı sekmesinin kapanışını
+	// izleyecek bir API yok, tıpkı durum penceresinin tarayıcı düşüşünde de
+	// olmadığı gibi — kabul edilebilir, nadir yol (bkz. internal/pencere).
+	webviewAcik := pencere.Ac(kurulumURL, 480, 560) == nil
+	if !webviewAcik {
+		gunluk.Yaz("kurulum penceresi açılamadı, tarayıcıya düşülüyor")
+		tarayicidaAc(kurulumURL)
+	}
+
+	// pencere.OneGetir() paketi DEĞİŞTİRMEDEN (bkz. internal/pencere) "pencere
+	// kapatıldı mı" sorusuna cevap verebildiğimiz TEK yol: pencere açıkken nil,
+	// kapalıyken hata döner. Kullanıcı sihirbazı X'e basıp kapatırsa (eşleşme
+	// olmadan) bu yoklama olmasaydı süreç tepside görünmeden sonsuza dek asılı
+	// kalırdı — eski zenity.Entry'nin "Vazgeç" düğmesinin yerini bu alır.
+	var tikCh <-chan time.Time
+	if webviewAcik {
+		tik := time.NewTicker(500 * time.Millisecond)
+		defer tik.Stop()
+		tikCh = tik.C
+	}
+	for {
+		select {
+		case es := <-sihirbaz.Sonuc():
+			return kurulumTamamlandi(es, makineAdi)
+		case <-tikCh:
+			if pencere.OneGetir() != nil {
+				gunluk.Yaz("kurulum penceresi kapatıldı, kurulum iptal edildi")
 				return kurulumIptal
 			}
-			continue
 		}
-
-		// Kazanan sunucuya kilitlen: nabız/işler bundan sonra hep oraya gider.
-		istemci = api.New(sunucu)
-		istemci.Token = cevap.Token
-		yapilandirma.Token = cevap.Token
-		yapilandirma.IsletmeAd = cevap.IsletmeAd
-		yapilandirma.CihazAd = makineAdi
-		yapilandirma.SunucuURL = sunucu
-		if err := ayar.Kaydet(yapilandirma); err != nil {
-			gunluk.Yaz("ayar kaydedilemedi: %v", err)
-		}
-		gunluk.Yaz("eşleşme başarılı: işletme=%s cihaz=%d", cevap.IsletmeAd, cevap.CihazID)
-
-		// Kendini kurulu konuma kopyala; Run anahtarı KOPYALANAN yola yazılır
-		// (İndirilenler yolu değil — kullanıcı indirdiği dosyayı silince
-		// otomatik başlatma kırılmasın).
-		kuruluYolu, kopyalandi := kuruluKopyayaKur()
-		_ = zenity.Info(
-			fmt.Sprintf("Bağlandı: %s\n\nBilgisayar açıldığında program kendiliğinden çalışacak.\n"+
-				"Şimdi panelden yazıcınızı seçebilirsiniz:\nYazıcılar → Yeni Yazıcı → Bulunan Yazıcılar", cevap.IsletmeAd),
-			zenity.Title("Hizmetra Yazıcı — Kurulum tamam"))
-		// Başka yoldan (İndirilenler) açıldıysak kurulu kopyaya devret: durum
-		// penceresini o açar (--durum-ac). Devredilemezse buradan devam.
-		if kopyalandi && kuruluKopyayiBaslat(kuruluYolu, durumAcArg) {
-			return kurulumDevredildi
-		}
-		// "Tamam"dan sonra durum penceresini aç: bağlantı + hesap tek bakışta görünsün.
-		durumPenceresiniAc()
-		return kurulumDevam
 	}
+}
+
+// kurulumTamamlandi — eşleşme başarılı olduktan SONRAKİ adımlar (v0.2.0'dan
+// beri değişmeyen kısım): ayarı kaydet, kurulu konuma kopyala + Run anahtarını
+// kur, gerekiyorsa kurulu kopyaya devret, durum penceresine geç. sayfa.html
+// zaten "Bağlandı: {işletme}" ekranını gösterdi; kullanıcı bunu okusun diye
+// kısa bir bekleme payı bırakılır (eski zenity.Info diyaloğunun yerini alır —
+// artık pencere İÇİNDE, ayrı bir OS diyaloğu YOK).
+func kurulumTamamlandi(es kurulum.EslesmeSonucu, makineAdi string) kurulumSonuc {
+	// Kazanan sunucuya kilitlen: nabız/işler bundan sonra hep oraya gider.
+	istemci = api.New(es.Sunucu)
+	istemci.Token = es.Cevap.Token
+	yapilandirma.Token = es.Cevap.Token
+	yapilandirma.IsletmeAd = es.Cevap.IsletmeAd
+	yapilandirma.CihazAd = makineAdi
+	yapilandirma.SunucuURL = es.Sunucu
+	if err := ayar.Kaydet(yapilandirma); err != nil {
+		gunluk.Yaz("ayar kaydedilemedi: %v", err)
+	}
+	gunluk.Yaz("eşleşme başarılı: işletme=%s cihaz=%d", es.Cevap.IsletmeAd, es.Cevap.CihazID)
+
+	// Kendini kurulu konuma kopyala; Run anahtarı KOPYALANAN yola yazılır
+	// (İndirilenler yolu değil — kullanıcı indirdiği dosyayı silince otomatik
+	// başlatma kırılmasın).
+	kuruluYolu, kopyalandi := kuruluKopyayaKur()
+	time.Sleep(2 * time.Second) // sayfadaki "Bağlandı" ekranını okuyacak süre
+	// Başka yoldan (İndirilenler) açıldıysak kurulu kopyaya devret: durum
+	// penceresini o açar (--durum-ac). Devredilemezse buradan devam.
+	if kopyalandi && kuruluKopyayiBaslat(kuruluYolu, durumAcArg) {
+		return kurulumDevredildi
+	}
+	durumPenceresiniAc()
+	return kurulumDevam
 }
 
 // Kurulu-kopya diyaloğu seçenekleri (zenity.List satırları).
