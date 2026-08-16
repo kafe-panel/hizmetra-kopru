@@ -63,6 +63,35 @@ type Ajan struct {
 	bekleSn int
 	pollSn  int
 	ayarKilit sync.Mutex
+
+	// YetkisizGeldi — token KALICI geçersizleşince (art arda 401: cihaz panelden
+	// silinmiş) çağrılır. main tarafı bunu sync.Once ile yakalar: config'teki
+	// token'ı temizler + süreci yeniden başlatır ki boş token'la ilkKurulum
+	// (eşleştirme penceresi) açılsın — kullanıcı yeni kodu girer. nil ise eski
+	// davranış: yalnız "Eşleştirme geçersiz" gösterilir (çıkmaz). Bu, emre'nin
+	// 2026-08-17 yaşadığı "cihaz silindi, kod girecek yer yok" bug'ının çözümü.
+	YetkisizGeldi func()
+	yetkisizSayac int
+	yetkisizKilit sync.Mutex
+}
+
+// yetkisizArtir — art arda 401 sayar; EŞİK (2) aşılınca YetkisizGeldi'yi tetikler.
+// Eşik 2: tek gelip-geçici bir 401 (ör. sunucu kısa kesinti) yeniden eşleştirmeyi
+// (token temizleme + yeniden başlatma) TETİKLEMESİN. Başarılı nabız/işte sıfırlanır.
+func (a *Ajan) yetkisizArtir() {
+	a.yetkisizKilit.Lock()
+	a.yetkisizSayac++
+	tetik := a.yetkisizSayac >= 2
+	a.yetkisizKilit.Unlock()
+	if tetik && a.YetkisizGeldi != nil {
+		a.YetkisizGeldi()
+	}
+}
+
+func (a *Ajan) yetkisizSifirla() {
+	a.yetkisizKilit.Lock()
+	a.yetkisizSayac = 0
+	a.yetkisizKilit.Unlock()
 }
 
 // Yeni — ajan kurar.
@@ -145,6 +174,7 @@ func (a *Ajan) nabizAt() {
 		bekle = *cevap.BekleSn
 	}
 	a.direktifAyarla(bekle, cevap.PollSn)
+	a.yetkisizSifirla() // başarılı nabız → 401 sayacı sıfırlanır
 	a.Durum.Ayarla(func(d *Durum) {
 		d.Bagli = true
 		d.SonHata = ""
@@ -171,6 +201,7 @@ func (a *Ajan) IsDongusu(dur <-chan struct{}) {
 					d.SonHata = "Eşleştirme geçersiz — panelden yeni kurulum kodu alın"
 				})
 				gunluk.Yaz("yetkisiz: cihaz panelden kaldırılmış olabilir")
+				a.yetkisizArtir() // art arda 401 → main yeniden eşleştirme penceresi açar
 				// Yetki hatasında hızlı döngüye girme.
 				if bekleVeyaDur(dur, 60*time.Second) {
 					return
@@ -187,6 +218,7 @@ func (a *Ajan) IsDongusu(dur <-chan struct{}) {
 			continue
 		}
 		geriCekilme = time.Second
+		a.yetkisizSifirla() // başarılı iş çekme → 401 sayacı sıfırlanır
 		a.Durum.Ayarla(func(d *Durum) { d.Bagli = true; d.SonHata = "" })
 
 		if len(isler) == 0 {
@@ -242,6 +274,9 @@ func (a *Ajan) hataIsle(nerede string, err error) {
 		d.Bagli = false
 		d.SonHata = err.Error()
 	})
+	if errors.Is(err, api.ErrYetkisiz) {
+		a.yetkisizArtir() // nabız 401'i de art arda sayılır → yeniden eşleştirme
+	}
 }
 
 // bekleVeyaDur — süre kadar bekler; dur kapanırsa true döner.

@@ -193,3 +193,32 @@ func TestYetkisizDurumaYansir(t *testing.T) {
 		t.Error("401 sonrası kullanıcıya mesaj yok")
 	}
 }
+
+// TestYetkisizYenidenEslestirEsigi — art arda 401'de YetkisizGeldi (yeniden
+// eşleştirme) EŞİK 2'de TETİKLENİR, tek 401'de tetiklenmez, başarı sıfırlar.
+// emre 2026-08-17: cihaz panelden silininceç token geçersiz kalıyor, program
+// "Eşleştirme geçersiz"de takılıp kod sormuyordu — bu, otomatik yeniden
+// eşleştirme tetiğinin çekirdek mantığı.
+func TestYetkisizYenidenEslestirEsigi(t *testing.T) {
+	var tetik int
+	a := &Ajan{YetkisizGeldi: func() { tetik++ }}
+
+	a.yetkisizArtir() // 1. 401 — eşik 2, tetiklenMEmeli
+	if tetik != 0 {
+		t.Fatalf("tek 401'de yeniden eşleştirme tetiklenmemeliydi (gelip-geçici olabilir), tetik=%d", tetik)
+	}
+	a.yetkisizArtir() // 2. ardışık 401 — tetiklenmeli
+	if tetik != 1 {
+		t.Fatalf("ikinci ardışık 401'de tam bir kez tetiklenmeliydi, tetik=%d", tetik)
+	}
+
+	a.yetkisizSifirla() // başarılı nabız/iş → sayaç sıfırlanır
+	a.yetkisizArtir()
+	if tetik != 1 {
+		t.Fatalf("sıfırlama sonrası tek 401 tetiklememeliydi, tetik=%d", tetik)
+	}
+	a.yetkisizArtir()
+	if tetik != 2 {
+		t.Fatalf("sıfırlama sonrası ikinci ardışık 401 yeniden tetiklemeliydi, tetik=%d", tetik)
+	}
+}

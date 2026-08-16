@@ -93,3 +93,12 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 ; hızlı arka plan çağrısı (main.go: hata/token yokluğu dahil her durumda
 ; sessizce os.Exit(0)). RunOnceId: aynı kaldırmada birden fazla tetiklenmesin.
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--kaldir-sunucu"; RunOnceId: "KaldirSunucu"; Flags: runhidden
+
+[UninstallDelete]
+; Kaldırınca ayar/log klasörünü de sil (%APPDATA%\HizmetraKopru): token + kod +
+; günlük. Böylece KALDIR sonrası YENİDEN KUR = TEMİZ başlangıç (boş token →
+; program kod sorar). Bu olmadan eski/GEÇERSİZ token kalıyor ve program
+; "Eşleştirme geçersiz"de takılıp kod sormuyordu (emre 2026-08-17). Not:
+; GÜNCELLEME (installer'ın üstüne kurulumu) kaldırma çalıştırmaz → eşleşme KORUNUR;
+; yalnız gerçek KALDIR temizler — ki o zaten --kaldir-sunucu ile cihazı da siler.
+Type: filesandordirs; Name: "{userappdata}\HizmetraKopru"

@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -93,6 +94,7 @@ func main() {
 	}
 
 	ajan = kopru.Yeni(istemci, yazdir.Bas, kesif.Bul, Surum, durum)
+	ajan.YetkisizGeldi = yenidenEslestir // token kalıcı geçersizse otomatik yeniden eşleştir
 	durum.Ayarla(func(d *kopru.Durum) { d.IsletmeAd = yapilandirma.IsletmeAd })
 
 	go ajan.NabizDongusu(dur)
@@ -199,6 +201,43 @@ func kurulumTamamlandi(es kurulum.EslesmeSonucu, makineAdi string) kurulumSonuc 
 	time.Sleep(2 * time.Second) // sayfadaki "Bağlandı" ekranını okuyacak süre
 	durumPenceresiniAc()
 	return kurulumDevam
+}
+
+// yenidenEslestirBir — yenidenEslestir yalnız BİR kez çalışsın (iki döngü aynı
+// anda 401 alıp iki kez tetikleyebilir; süreç zaten yeniden başlıyor).
+var yenidenEslestirBir sync.Once
+
+// yenidenEslestir — token KALICI geçersiz (art arda 401: cihaz panelden silinmiş).
+// Config'teki token'ı temizler ve süreci YENİDEN BAŞLATIR: yeni süreç boş token
+// görüp ilkKurulum'u (eşleştirme penceresini) açar, kullanıcı yeni 6 haneli kodu
+// girer. Eski davranış "Eşleştirme geçersiz" gösterip çıkmazda kalıyordu; kod
+// girecek yer yoktu (emre 2026-08-17: Denetim Masası'ndan kaldırıp yeniden
+// kurunca eşleşemedi). ajan.YetkisizGeldi olarak bağlanır (dongu.go).
+//
+// Süreç değiştirme (in-process ilkKurulum yerine): kurulumTamamlandi YENİ bir
+// api.Client yaratıyor ama çalışan ajan ESKİ istemciyi tutuyor — canlı döngüde
+// güvenli değiştirmek yarış/karmaşa demek. Temiz yeniden başlatma, KANITLANMIŞ
+// "boş token → ilkKurulum" yolunu aynen kullanır. Kilit önce bırakılır ki yeni
+// süreç tek-kopya kilidini alabilsin (bkz. tekKopyaKilidiBirak / "Güncelle" deseni).
+func yenidenEslestir() {
+	yenidenEslestirBir.Do(func() {
+		gunluk.Yaz("token kalıcı geçersiz → temizlenip yeniden eşleştirme için yeniden başlatılıyor")
+		yapilandirma.Token = ""
+		if err := ayar.Kaydet(yapilandirma); err != nil {
+			gunluk.Yaz("token temizlenemedi: %v", err)
+		}
+		exe, err := os.Executable()
+		if err != nil {
+			gunluk.Yaz("executable yolu alınamadı, yeniden başlatılamıyor: %v", err)
+			return
+		}
+		tekKopyaKilidiBirak() // yeni süreç kilidi alabilsin (aksi halde /odaklan'a düşer)
+		if err := exec.Command(exe).Start(); err != nil {
+			gunluk.Yaz("yeniden başlatma başarısız: %v", err)
+			return
+		}
+		systray.Quit() // bu süreç temiz kapansın (trayBitti → çıkış)
+	})
 }
 
 // eslestirmeDene — kurulum kodunu bilinen sunucularda (ayar.SunucuAdaylari)
