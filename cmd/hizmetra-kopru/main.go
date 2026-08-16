@@ -25,6 +25,7 @@ import (
 	"github.com/kafe-panel/hizmetra-kopru/internal/gunluk"
 	"github.com/kafe-panel/hizmetra-kopru/internal/kesif"
 	"github.com/kafe-panel/hizmetra-kopru/internal/kopru"
+	"github.com/kafe-panel/hizmetra-kopru/internal/pencere"
 	"github.com/kafe-panel/hizmetra-kopru/internal/yazdir"
 )
 
@@ -89,9 +90,9 @@ func main() {
 			gunluk.Yaz("kurulum tamam; kurulu kopya devraldı, bu süreç çıkıyor")
 			return
 		}
-	} else if bayrakVar(durumAcArg) && durumURL != "" {
+	} else if bayrakVar(durumAcArg) {
 		// Devralan kopya: kullanıcı az önce exe'ye tıkladı → durum penceresi geri bildirimi.
-		tarayicidaAc(durumURL)
+		durumPenceresiniAc()
 	}
 
 	ajan = kopru.Yeni(istemci, yazdir.Bas, kesif.Bul, Surum, durum)
@@ -190,9 +191,7 @@ func ilkKurulum() kurulumSonuc {
 			return kurulumDevredildi
 		}
 		// "Tamam"dan sonra durum penceresini aç: bağlantı + hesap tek bakışta görünsün.
-		if durumURL != "" {
-			tarayicidaAc(durumURL)
-		}
+		durumPenceresiniAc()
 		return kurulumDevam
 	}
 }
@@ -360,9 +359,7 @@ func trayHazir() {
 		for {
 			select {
 			case <-mGoster.ClickedCh:
-				if durumURL != "" {
-					tarayicidaAc(durumURL)
-				}
+				durumPenceresiniAc()
 			case <-mPanel.ClickedCh:
 				tarayicidaAc(panelAdresi())
 			case <-mCikis.ClickedCh:
@@ -402,6 +399,22 @@ func tarayicidaAc(hedef string) {
 	}
 	if err := cmd.Start(); err != nil {
 		gunluk.Yaz("açılamadı (%s): %v", hedef, err)
+	}
+}
+
+// durumPenceresiniAc — durum penceresini GERÇEK bir native pencerede
+// (WebView2) açmayı dener (emre 2026-08-16: "bilgisayardaki uygulamada
+// görünmesi gerek" — sistem tarayıcısında DEĞİL). Pencere açılamazsa
+// (WebView2 Runtime kurulu değil, oluşturma hatası/zaman aşımı) TEK düşüş
+// dalı: eski davranış — sistem tarayıcısında aç. "Paneli Aç" tray menüsü BU
+// FONKSİYONU KULLANMAZ; o gerçek bir dış web sitesi, hep tarayicidaAc ile açılır.
+func durumPenceresiniAc() {
+	if durumURL == "" {
+		return
+	}
+	if err := pencere.Ac(durumURL, 900, 640); err != nil {
+		gunluk.Yaz("durum penceresi açılamadı (%v), tarayıcıya düşülüyor", err)
+		tarayicidaAc(durumURL)
 	}
 }
 

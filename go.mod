@@ -5,8 +5,11 @@ go 1.25.0
 require (
 	fyne.io/systray v1.12.2
 	github.com/godoes/printers v0.1.4
+	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	github.com/ncruces/zenity v0.10.15
 )
+
+require github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
 
 require (
 	github.com/akavel/rsrc v0.10.2 // indirect
