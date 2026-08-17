@@ -60,6 +60,9 @@ archives:
 nfpms:
   - id: linux-paket
     package_name: hizmetra-kopru
+    # SABİT ad (sürümsüz) → panel "latest/download/hizmetra-kopru_linux_amd64.deb"
+    # kararlı linki her sürümde çalışsın (nfpm varsayılanı sürüm-adlı üretir).
+    file_name_template: "hizmetra-kopru_{{ .Os }}_{{ .Arch }}"
     ids: [linux]
     vendor: Hizmetra
     homepage: https://github.com/kafe-panel/hizmetra-kopru
