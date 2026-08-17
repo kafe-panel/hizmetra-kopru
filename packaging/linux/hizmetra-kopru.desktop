@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Hizmetra Yazıcı
+GenericName=Fiş Yazıcı Köprüsü
+Comment=Kafe fiş yazıcılarını Hizmetra Panel'e bağlar
+Exec=/usr/bin/hizmetra-kopru
+Icon=hizmetra-kopru
+Terminal=false
+Categories=Utility;
+StartupNotify=false
+# XDG autostart: masaüstü oturumu açılışında otomatik başlat. Bu dosya .deb ile
+# HEM /etc/xdg/autostart (otomatik başlatma) HEM /usr/share/applications
+# (uygulama menüsü) altına kurulur — bkz. .goreleaser.yaml nfpms contents.
+X-GNOME-Autostart-enabled=true

@@ -1,0 +1,23 @@
+HIZMETRA YAZICI — Mac Kurulumu (3 adım)
+========================================
+
+1) "Hizmetra Yazıcı" simgesini, yanındaki "Applications" (Uygulamalar)
+   klasörünün üzerine SÜRÜKLEYİP bırakın.
+
+2) Uygulamalar klasörünü açın, "Hizmetra Yazıcı"ya SAĞ TIKLAYIN ve "Aç" deyin.
+   Çıkan uyarı penceresinde tekrar "Aç" düğmesine basın.
+
+   NEDEN? Uygulama henüz Apple tarafından imzalanmadığı için, ÇİFT TIKLAMAYLA
+   açmayı denerseniz macOS "geliştirici doğrulanamadı" diyip engeller. Yalnızca
+   İLK açılışta "sağ tık -> Aç" yapmanız gerekir; sonrasında normal çift tıkla
+   açılır. (Bu güvenli — imzalama sertifikası başvurusu sürüyor.)
+
+3) Panelde görünen 6 haneli kurulum kodunu girin. Bağlantı kurulunca fişler
+   otomatik yazdırılmaya başlar.
+
+Not: Uygulama ekranın SAĞ ÜST köşesindeki menü çubuğunda küçük bir simge olarak
+çalışır (Dock'ta görünmez). Ayarlara/duruma bu simgeye tıklayarak ulaşırsınız.
+Bilgisayarı her açtığınızda kendiliğinden başlar.
+
+Sorun olursa: Uygulamalar > Hizmetra Yazıcı'yı silip bu penceredeki adımları
+tekrarlayın, ya da destek@hizmetra.com ile iletişime geçin.

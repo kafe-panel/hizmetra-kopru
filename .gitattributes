@@ -1,0 +1,13 @@
+# macOS/Linux CI runner'ları bu dosyaları LF bekler — Windows'ta düzenlense bile
+# CRLF girmesin (CRLF'li bir bash script'i `\r` yüzünden patlar; .desktop bozulur).
+*.sh            text eol=lf
+*.desktop       text eol=lf
+*.plist         text eol=lf
+Info.plist.template text eol=lf
+BENI-OKU.txt    text eol=lf
+
+# Üretilen ikili varlıklar (satır-sonu dönüşümü UYGULANMASIN).
+*.png binary
+*.ico binary
+*.icns binary
+*.syso binary

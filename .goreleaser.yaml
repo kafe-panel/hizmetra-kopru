@@ -52,6 +52,38 @@ archives:
     formats: [binary]
     name_template: 'hizmetra-kopru{{ if ne .Os "windows" }}_{{ .Os }}_{{ .Arch }}{{ end }}'
 
+# Linux .deb — kafe sahibi için KURULABİLİR paket (ham binary'nin yanında kalır).
+# nfpm binary'yi /usr/bin/hizmetra-kopru'ya koyar, autostart .desktop'unu
+# /etc/xdg/autostart'a (login'de otomatik başlatma) + uygulama menüsüne kurar,
+# ve ikonu hicolor temasına yerleştirir. Her mimari için ayrı .deb üretilir
+# (amd64 + arm64), 'linux' build id'sinden türetilerek.
+nfpms:
+  - id: linux-paket
+    package_name: hizmetra-kopru
+    ids: [linux]
+    vendor: Hizmetra
+    homepage: https://github.com/kafe-panel/hizmetra-kopru
+    maintainer: Hizmetra <destek@hizmetra.com>
+    description: |
+      Hizmetra Yazıcı — kafe fiş yazıcılarını Hizmetra Panel'e bağlayan köprü ajanı.
+      Panelden gelen fişleri yerel yazıcılara basar; kurulum tek 6 haneli kodla biter.
+    license: Proprietary
+    section: utils
+    formats:
+      - deb
+    # Binary varsayılan bindir'e (/usr/bin) hizmetra-kopru adıyla kurulur.
+    bindir: /usr/bin
+    contents:
+      # Login'de otomatik başlatma (XDG autostart, sistem geneli).
+      - src: packaging/linux/hizmetra-kopru.desktop
+        dst: /etc/xdg/autostart/hizmetra-kopru.desktop
+      # Uygulama menüsü girdisi (elle başlatmak için).
+      - src: packaging/linux/hizmetra-kopru.desktop
+        dst: /usr/share/applications/hizmetra-kopru.desktop
+      # Menü/tepsi ikonu (hicolor teması, 256px).
+      - src: assets/hizmetra.png
+        dst: /usr/share/icons/hicolor/256x256/apps/hizmetra-kopru.png
+
 checksum:
   name_template: "checksums.txt"
 
@@ -69,8 +101,15 @@ release:
   header: |
     ## Kurulum
 
-    1. Aşağıdan **hizmetra-kopru.exe** dosyasını indirin
-    2. Çift tıklayın (Windows uyarırsa: **Ek bilgi → Yine de çalıştır**)
-    3. Paneldeki **6 haneli kurulum kodunu** girin
+    **Windows:** Aşağıdan **HizmetraYaziciKurulum.exe** kurulumunu (veya taşınabilir
+    **hizmetra-kopru.exe**'yi) indirin → çift tıklayın (Windows uyarırsa:
+    **Ek bilgi → Yine de çalıştır**) → paneldeki **6 haneli kodu** girin.
+
+    **Mac:** **HizmetraYazici.dmg**'yi indirin → uygulamayı **Applications**'a
+    sürükleyin → ilk açılışta **sağ tık → Aç** (imzasız) → **6 haneli kodu** girin.
+
+    **Linux (Debian/Ubuntu):** `sudo apt install ./hizmetra-kopru_*_amd64.deb`
+    → menüden başlatın → **6 haneli kodu** girin. (Paket-yöneticisiz için ham
+    **hizmetra-kopru_linux_amd64** ikilisi de aşağıdadır.)
 
     Ayrıntı için [README](https://github.com/kafe-panel/hizmetra-kopru#kurulum-3-dakika).

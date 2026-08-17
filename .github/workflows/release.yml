@@ -75,6 +75,22 @@ jobs:
             hizmetra-kopru_darwin_arm64 \
             --repo "${{ github.repository }}" --clobber
 
+      # .app bundle + .dmg: cafe sahibi için KURULABİLİR paket (ham ikili
+      # terminal ister; .dmg "Applications'a sürükle" ile kurulur, LSUIElement
+      # tray uygulaması). paket.sh yukarıda üretilen darwin ikililerini lipo ile
+      # evrensel yapar, Info.plist + icon.icns'i ekler, imzasız .dmg'yi üretir.
+      # (Kod imzalama sertifikası gelince buraya codesign + notarize eklenecek.)
+      - name: macOS .app + .dmg paketle
+        run: bash packaging/macos/paket.sh "${GITHUB_REF_NAME#v}"
+
+      - name: DMG'yi release'e yükle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            dist-macos/HizmetraYazici.dmg \
+            --repo "${{ github.repository }}" --clobber
+
   # Inno Setup installer (Task C4). AYRI job + windows-latest ZORUNLU: goreleaser
   # yukarıda ubuntu-latest'te CROSS-COMPILE ediyor (CGO_ENABLED=0, GOOS=windows) —
   # iscc.exe Windows-only olduğu için aynı job'da çalışamaz. goreleaser'ın az önce

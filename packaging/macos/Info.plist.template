@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hizmetra Yazıcı .app bundle Info.plist ŞABLONU.
+     __VERSION__ yer tutucusu packaging/macos/paket.sh tarafından etiket sürümüyle
+     (ör. 0.5.0) doldurulur. LSUIElement=true: Dock'ta görünmez, yalnız menü
+     çubuğunda tepsi simgesi olarak çalışır (ajan bir tray uygulamasıdır). -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Hizmetra Yazıcı</string>
+	<key>CFBundleDisplayName</key>
+	<string>Hizmetra Yazıcı</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.hizmetra.kopru</string>
+	<key>CFBundleExecutable</key>
+	<string>hizmetra-kopru</string>
+	<key>CFBundleIconFile</key>
+	<string>icon</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__VERSION__</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>10.13</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>
