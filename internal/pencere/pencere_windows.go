@@ -40,6 +40,34 @@ var (
 	hwnd uintptr          // acik != nil iken geçerli pencere tutamağı
 )
 
+var (
+	user32DLL           = windows.NewLazySystemDLL("user32.dll")
+	procGetDpiForSystem = user32DLL.NewProc("GetDpiForSystem")
+)
+
+// dpiOlcek — sistem DPI ölçeği (1.0=%100, 1.5=%150…). GetDpiForSystem Win10
+// 1607+ vardır; yoksa (win7/8) güvenli şekilde 1.0 döner.
+//
+// NEDEN GEREKLİ (emre 2026-08-18: "arayüz açılınca her şey görünmüyor, elle
+// genişletmek gerekiyor"): manifest "system DPI aware" olduğundan Windows
+// pencereyi DPI'ye göre OTOMATİK büyütmez; WebView2 içeriği ise sistem DPI'sinde
+// render eder. Pencere FİZİKSEL boyutunu ölçekle ÇARPMAZSAK, %150 DPI'li bir
+// ekranda 900px'lik pencerede içerik yalnız ~600 CSS px alan bulur → taşar,
+// kullanıcı pencereyi elle büyütmek zorunda kalır. Ölçekle çarpınca içerik HER
+// bilgisayarda AYNI CSS px alanını görür (istenen tasarım genişliği korunur).
+// (Not: go-webview2 bugün DPI'yi kendi telafi etmiyor; ederse bu çarpım tek
+// katman fazladan olurdu — sürüm yükseltirken kontrol et.)
+func dpiOlcek() float64 {
+	if procGetDpiForSystem.Find() != nil {
+		return 1.0
+	}
+	dpi, _, _ := procGetDpiForSystem.Call()
+	if dpi == 0 {
+		return 1.0
+	}
+	return float64(dpi) / 96.0
+}
+
 // Ac bir pencere açar ve url'i yükler. Zaten açıksa YENİ PENCERE AÇMAZ: var
 // olanı öne getirir ve aynı adrese yeniden yönlendirir — tekrar tıklama
 // "öne getir" gibi davranır, kafa karıştırmaz.
@@ -103,12 +131,15 @@ func pencereYasaDongusu(url string, genislik, yukseklik int, sonuc chan<- error)
 	// ihtiyacını genelde ayrıca karşılar.
 	_ = windows.CoInitializeEx(0, windows.COINIT_APARTMENTTHREADED)
 
+	// DPI-duyarlı fiziksel boyut: içerik her ekranda 'genislik'×'yukseklik' CSS px
+	// alan görsün (bkz. dpiOlcek — yüksek DPI'de taşma/elle-büyütme sorunu).
+	olcek := dpiOlcek()
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		Debug: false, // sağ tık/DevTools KAPALI — üretim penceresi, "app" hissi
 		WindowOptions: webview2.WindowOptions{
 			Title:  "Hizmetra Yazıcı",
-			Width:  uint(genislik),
-			Height: uint(yukseklik),
+			Width:  uint(float64(genislik) * olcek),
+			Height: uint(float64(yukseklik) * olcek),
 			Center: true,
 			// IconId=1: exe'ye winres/winres.json ile gömülen grup ikonun
 			// SAYISAL kaynak kimliği. winres.json'da RT_GROUP_ICON anahtarı

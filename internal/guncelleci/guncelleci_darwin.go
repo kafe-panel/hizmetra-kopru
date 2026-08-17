@@ -40,10 +40,24 @@ func DmgKur(dmgYolu, uygulamaAdi string) error {
 	}
 	hedef := filepath.Join("/Applications", uygulamaAdi)
 
-	// Eski .app'i kaldır + yenisini kopyala (ditto, .app kaynaklarını korur).
-	_ = os.RemoveAll(hedef)
-	if cikti, err := exec.Command("ditto", kaynak, hedef).CombinedOutput(); err != nil {
+	// ATOMİK değişim (hasım-review YÜKSEK-2): önce GEÇİCİ ada kopyala; başarılıysa
+	// eskiyi silip yeniyi rename et. Doğrudan "sil sonra kopyala" yapılırsa ditto
+	// yarıda kesilince (disk dolu, kaynak hatası) ESKİ .app gitmiş + yeni gelmemiş
+	// olur → LaunchAgent olmayan yolu başlatır, köprü kalıcı ölür, kullanıcı elle
+	// .dmg indirmek zorunda kalır. Bu yolla hata olsa bile eski .app YERİNDE kalır.
+	gecici := hedef + ".guncelleme-yeni"
+	_ = os.RemoveAll(gecici)
+	if cikti, err := exec.Command("ditto", kaynak, gecici).CombinedOutput(); err != nil {
+		_ = os.RemoveAll(gecici)
 		return fmt.Errorf("kopyalama (ditto) başarısız: %v (%s)", err, strings.TrimSpace(string(cikti)))
+	}
+	// RemoveAll+Rename arası çok kısa; Rename aynı cilt içinde atomiktir.
+	if err := os.RemoveAll(hedef); err != nil {
+		_ = os.RemoveAll(gecici)
+		return fmt.Errorf("eski sürüm kaldırılamadı: %w", err)
+	}
+	if err := os.Rename(gecici, hedef); err != nil {
+		return fmt.Errorf("yeni sürüm devreye alınamadı: %w", err)
 	}
 	// Gatekeeper karantina bayrağını temizle (imzasız indirme aksi halde açılmaz).
 	_ = exec.Command("xattr", "-dr", "com.apple.quarantine", hedef).Run()

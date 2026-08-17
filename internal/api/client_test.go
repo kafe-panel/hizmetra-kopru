@@ -254,3 +254,41 @@ func TestKaldir404UcYok(t *testing.T) {
 		t.Fatal("uç yokken (404) bir hata dönmeli")
 	}
 }
+
+// TestIndirmeURLIcin — platform/mimari → doğru paket seçimi (hasım-review KRİTİK-1
+// takip). Yeni sunucu indirme_urls haritası döner; ajan kendi OS/arch'ına göre seçer.
+func TestIndirmeURLIcin(t *testing.T) {
+	b := &SurumBilgi{
+		IndirmeURL: "https://x/HizmetraYaziciKurulum.exe",
+		IndirmeURLler: map[string]string{
+			"windows":     "https://x/HizmetraYaziciKurulum.exe",
+			"darwin":      "https://x/HizmetraYazici.dmg",
+			"linux_amd64": "https://x/k_linux_amd64.deb",
+			"linux_arm64": "https://x/k_linux_arm64.deb",
+		},
+	}
+	testler := []struct{ os, arch, bek string }{
+		{"windows", "amd64", "https://x/HizmetraYaziciKurulum.exe"},
+		{"darwin", "arm64", "https://x/HizmetraYazici.dmg"}, // os_arch yok → os anahtarı
+		{"darwin", "amd64", "https://x/HizmetraYazici.dmg"},
+		{"linux", "amd64", "https://x/k_linux_amd64.deb"},
+		{"linux", "arm64", "https://x/k_linux_arm64.deb"},
+	}
+	for _, tt := range testler {
+		if g := b.IndirmeURLIcin(tt.os, tt.arch); g != tt.bek {
+			t.Errorf("IndirmeURLIcin(%q,%q)=%q, beklenen %q", tt.os, tt.arch, g, tt.bek)
+		}
+	}
+	// Legacy (eski sunucu: yalnız IndirmeURL) → Windows'a düşer, mac/linux BOŞ
+	// (installer .exe mac/linux'a verilmemeli; boşsa güncelle şeridi hiç çıkmaz).
+	eski := &SurumBilgi{IndirmeURL: "https://x/HizmetraYaziciKurulum.exe"}
+	if eski.IndirmeURLIcin("windows", "amd64") == "" {
+		t.Error("legacy windows IndirmeURL'e düşmeli")
+	}
+	if g := eski.IndirmeURLIcin("darwin", "arm64"); g != "" {
+		t.Errorf("legacy'de darwin BOŞ dönmeli, geldi %q", g)
+	}
+	if g := eski.IndirmeURLIcin("linux", "amd64"); g != "" {
+		t.Errorf("legacy'de linux BOŞ dönmeli, geldi %q", g)
+	}
+}

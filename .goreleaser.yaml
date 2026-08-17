@@ -70,7 +70,7 @@ nfpms:
     description: |
       Hizmetra Yazıcı — kafe fiş yazıcılarını Hizmetra Panel'e bağlayan köprü ajanı.
       Panelden gelen fişleri yerel yazıcılara basar; kurulum tek 6 haneli kodla biter.
-    license: Proprietary
+    license: MIT
     section: utils
     formats:
       - deb

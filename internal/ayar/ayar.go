@@ -109,7 +109,20 @@ func Kaydet(a *Ayar) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, ham, 0o600)
+	// Atomik yazım (hasım-review ORTA-7): temp'e yaz + rename. Doğrudan WriteFile,
+	// yazım sırasında çökme VEYA iki kopyanın eşzamanlı yazımı (mac/linux'ta
+	// tek-kopya kilidi yok) hâlinde config.json'u yarım/bozuk bırakabilir → token
+	// veya SonBilinenPort kaybı. os.Rename aynı dizinde atomiktir (Windows'ta da
+	// MoveFileEx REPLACE_EXISTING ile mevcut dosyanın üstüne yazar).
+	gecici := p + ".tmp"
+	if err := os.WriteFile(gecici, ham, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(gecici, p); err != nil {
+		_ = os.Remove(gecici)
+		return err
+	}
+	return nil
 }
 
 // Sil — config.json'u kaldırır (token dahil her şey). "Onar" (yeniden
@@ -142,6 +155,7 @@ func (a *Ayar) SunucuAdresi() string {
 //   - env HIZMETRA_API varsa YALNIZ onu (açık geçersiz kılma),
 //   - kayıtlı SunucuURL varsa YALNIZ onu (zaten bir sunucuya eşleşmiş),
 //   - yoksa BilinenSunucular (production→staging otomatik keşif).
+//
 // Eşleşme başarınca kazanan sunucu SunucuURL'e yazılır; sonraki tüm
 // nabız/işler tek sunucuya gider.
 func (a *Ayar) SunucuAdaylari() []string {

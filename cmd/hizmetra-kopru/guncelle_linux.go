@@ -27,6 +27,14 @@ import (
 )
 
 func guncellePlatform(indirmeURL, yeniSurum string) {
+	// apt-get yoksa (Fedora/Arch/openSUSE — kullanıcı ham ikiliyle kurmuştur) .deb
+	// kurulamaz; indirmeden önce dur ve sürüm SAYFASINI aç (hasım-review ORTA-5:
+	// aksi halde kullanamayacağı bir .deb indirip kısır döngüye girerdi).
+	if _, err := exec.LookPath("apt-get"); err != nil {
+		gunluk.Yaz("güncelle: apt-get yok (Debian/Ubuntu dışı dağıtım) — sürüm sayfası tarayıcıda açılıyor")
+		tarayicidaAc("https://github.com/kafe-panel/hizmetra-kopru/releases/latest")
+		return
+	}
 	gunluk.Yaz("güncelle: yeni sürüm (%s) .deb indiriliyor…", yeniSurum)
 	deb := filepath.Join(os.TempDir(), "hizmetra-kopru-guncelleme.deb")
 	if err := dosyaIndir(indirmeURL, deb); err != nil {

@@ -391,11 +391,24 @@ func dosyaIndir(indirmeURL, hedef string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(f, cevap.Body); err != nil {
-		_ = f.Close()
-		return err
+	yazilan, kopyaHata := io.Copy(f, cevap.Body)
+	kapatHata := f.Close()
+	if kopyaHata != nil {
+		_ = os.Remove(hedef) // kısmi dosya kalmasın
+		return kopyaHata
 	}
-	return f.Close()
+	if kapatHata != nil {
+		_ = os.Remove(hedef)
+		return kapatHata
+	}
+	// Content-Length verildiyse tam indiğini DOĞRULA (hasım-review YÜKSEK-3):
+	// kesik indirme (proxy/kopuk hat) io.Copy'de temiz EOF ile "başarı" görünüp
+	// bozuk paketin kurulmasına yol açabilir. -1 (bilinmiyor) ise atlanır.
+	if cevap.ContentLength >= 0 && yazilan != cevap.ContentLength {
+		_ = os.Remove(hedef)
+		return fmt.Errorf("eksik indirme: %d/%d bayt", yazilan, cevap.ContentLength)
+	}
+	return nil
 }
 
 func trayHazir() {
@@ -505,7 +518,9 @@ func durumPenceresiniAc() {
 	if durumURL == "" {
 		return
 	}
-	if err := pencere.Ac(durumURL, 900, 640); err != nil {
+	// 940×660 CSS px: kompakt sayfa.html buna sığar (güncelle şeridi + footer
+	// butonları dahil); pencere.Ac DPI ölçeğini uygular → her ekranda tam görünür.
+	if err := pencere.Ac(durumURL, 940, 660); err != nil {
 		gunluk.Yaz("durum penceresi açılamadı (%v), tarayıcıya düşülüyor", err)
 		tarayicidaAc(durumURL)
 	}

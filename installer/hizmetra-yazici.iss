@@ -59,16 +59,18 @@ SetupIconFile=..\assets\hizmetra.ico
 ; olmadan Inno jenerik bir simge gösteriyordu (emre 2026-08-16: "denetim
 ; masasında logosu yok"). {app}\hizmetra.ico [Files] ile kopyalanır (aşağıda).
 UninstallDisplayIcon={app}\hizmetra.ico
-; AppMutex — uygulamanın tuttuğu tek-kopya mutex'iyle BİREBİR aynı ad
-; (cmd/hizmetra-kopru/platform_windows.go: mutexAdi = "Global\HizmetraKopruTekKopya").
-; Böylece installer (kurulum VEYA in-app güncelleme sırasında) çalışan uygulamayı
-; ALGILAR. Etkileşimli kurulumda "Kapatılacak uygulamalar" sayfası (Türkçe) gelir;
-; sessiz güncellemede /CLOSEAPPLICATIONS ile Restart Manager exe'yi kendi kapatır.
-AppMutex=Global\HizmetraKopruTekKopya
-; Sessiz oto-güncelleme için: çalışan kopyayı Inno kapatabilsin (dosya kilidi
-; açılsın) AMA yeniden başlatmayı RM'ye BIRAKMA — biz hızlı çıktığımız için RM
-; kapatacak süreç bulamayabilir; yeniden açmayı [Run] "Check: WizardSilent" yapar.
+; AppMutex KASITLI YOK (emre 2026-08-18): AppMutex set edilseydi Inno, kurulu
+; uygulama ÇALIŞIRKEN installer açılınca sihirbazdan ÖNCE "Uygulama çalışıyor,
+; lütfen kapatın → Tamam/İptal" (SetupAppRunningError) bloke edici diyaloğunu
+; gösterirdi. Kullanıcı bunu istemiyor: "uygulama yüklüyken böyle saçma bir şey
+; çıkmasın, elle kapatmakla uğraşmayayım". Bunun yerine: mevcut kurulum bulununca
+; DOĞRUDAN Güncelle/Onar/Kaldır paneli ([Code]) gelir; Güncelle/Onar/Kaldır
+; seçilince [Code] çalışan uygulamayı OTOMATİK kapatır (taskkill graceful→force,
+; bkz. KapatCalisanUygulama). CloseApplications de emniyet kemeri (RM, dosya kilidi).
 CloseApplications=yes
+; Yeniden başlatmayı RM'ye BIRAKMA (biz uygulamayı kendimiz kapatıyoruz → RM
+; kapatacak süreç bulamaz); yeniden açmayı sessizde [Run] "Check: WizardSilent",
+; etkileşimlide bitiş sayfasındaki "çalıştır" onay kutusu yapar.
 RestartApplications=no
 ; Tek dil (Türkçe) → dil seçme diyaloğu gösterme.
 ShowLanguageDialog=no
@@ -169,6 +171,23 @@ begin
     and (Komut <> '');
 end;
 
+// KapatCalisanUygulama — çalışan Hizmetra Yazıcı kopyalarını OTOMATİK kapatır ki
+// kullanıcı elle uğraşmasın (AppMutex diyaloğunun yerini alan asıl mekanizma).
+// Önce nazik (WM_CLOSE), tepsi uygulaması yanıt vermezse /F ile zorla; /T alt
+// süreçleri de kapatır. taskkill.exe tüm Windows'larda {sys}'te vardır. Çıkışta
+// dosya kilidi açılır → installer exe'nin üstüne yazabilir, [Run] yeniden açar.
+procedure KapatCalisanUygulama;
+var
+  SonucKodu: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#MyAppExeName} /T', '',
+    SW_HIDE, ewWaitUntilTerminated, SonucKodu);
+  Sleep(1200);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#MyAppExeName} /T', '',
+    SW_HIDE, ewWaitUntilTerminated, SonucKodu);
+  Sleep(400);
+end;
+
 procedure InitializeWizard;
 var
   Komut, KuruluSurum: string;
@@ -203,7 +222,9 @@ begin
   Result := True;
   if (MevcutPage <> nil) and (CurPageID = MevcutPage.ID) and (MevcutPage.SelectedValueIndex = 2) then
   begin
-    { Kaldır: kaldırıcıyı sessizce çalıştır, sonra kurulumu iptal et. }
+    { Kaldır: çalışan uygulamayı kapat (kaldırıcı kilitli exe'yi silebilsin),
+      kaldırıcıyı sessizce çalıştır, sonra kurulumu iptal et. }
+    KapatCalisanUygulama;
     if MevcutKaldirmaKomutu(Komut) then
     begin
       Komut := RemoveQuotes(Komut);
@@ -213,6 +234,18 @@ begin
     WizardForm.Close;
     Result := False;
   end;
+end;
+
+// PrepareToInstall — kurulum dosya kopyalama AŞAMASINDAN hemen önce koşar.
+// Güncelle/Onar seçildiyse çalışan uygulamayı BURADA kapat: kullanıcı sihirbazda
+// gezerken uygulama fişleri basmaya devam etsin, yalnız son anda (kurulum başlarken)
+// kapansın → en kısa kesinti. Fresh kurulumda (MevcutPage=nil) veya sessizde
+// (panel yok) hiçbir şey yapmaz. Kaldır dalı buraya ULAŞMAZ (setup iptal edildi).
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  if (MevcutPage <> nil) and (MevcutPage.SelectedValueIndex <> 2) then
+    KapatCalisanUygulama;
 end;
 
 procedure CancelButtonClick(CurPageID: Integer; var Cancel, Confirm: Boolean);
