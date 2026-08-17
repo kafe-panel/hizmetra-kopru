@@ -30,43 +30,51 @@ type Ozet struct {
 	Bagli     bool     `json:"bagli"`
 	IsletmeAd string   `json:"isletme_ad"`
 	Sunucu    string   `json:"sunucu"`    // bağlı olunan API kökü (panel linki bundan türetilir)
-	Surum     string   `json:"surum"`     // ajan sürümü
+	Surum     string   `json:"surum"`     // ajan sürümü (şu an çalışan)
 	Yazicilar []string `json:"yazicilar"` // bu bilgisayarda bulunan yazıcılar
 	SonIsler  []string `json:"son_isler"` // son baskı işleri (fiş şeridi özeti)
 	SonHata   string   `json:"son_hata"`  // en son hata (boşsa sorun yok)
 	SonBaski  string   `json:"son_baski"` // "15:04" — en son fiş saati (boşsa henüz basılmadı)
+	// GuncelSurum/IndirmeURL — sunucuda daha yeni bir sürüm varsa dolu olur;
+	// sayfa bunu görünce "Güncelle" şeridini gösterir (POST /guncelle → indir+kur).
+	GuncelSurum string `json:"guncel_surum"`
+	IndirmeURL  string `json:"indirme_url"`
 }
 
 // Sunucu — durum penceresi HTTP sunucusu.
 type Sunucu struct {
-	Token     string
-	ad        string // üst şeritte gösterilen uygulama adı ("Hizmetra Yazıcı")
-	surum     string
-	ozet      func() Ozet
-	gunluk    func(n int) []string
-	sablon    *template.Template
-	logoURI   template.URL
-	onOdaklan func() // /odaklan çağrılınca tetiklenir (main.go: pencere.OneGetir())
+	Token      string
+	ad         string // üst şeritte gösterilen uygulama adı ("Hizmetra Yazıcı")
+	surum      string
+	ozet       func() Ozet
+	gunluk     func(n int) []string
+	sablon     *template.Template
+	logoURI    template.URL
+	onOdaklan  func() // /odaklan çağrılınca tetiklenir (main.go: pencere.OneGetir())
+	onGuncelle func() // /guncelle çağrılınca tetiklenir (main.go: guncelle() — indir+kur)
 }
 
 // Yeni — durum sunucusu kurar. ozet anlık durumu, gunluk son N satırı döndürür.
 // onOdaklan — v0.4.0: aynı bilgisayarda ikinci bir kopya açılıp tek-kopya
 // kilidini alamadığında POST /odaklan ile bu sunucuya "pencereni öne getir"
 // sinyali gönderir (bkz. cmd/hizmetra-kopru main.go: digerKopyayaOdaklanDene).
-// nil verilebilir (ör. testlerde), o durumda /odaklan yalnız 200 döner.
-func Yeni(isletmeAd, surum string, ozet func() Ozet, gunluk func(int) []string, onOdaklan func()) *Sunucu {
+// onGuncelle — kullanıcı sayfadaki "Güncelle" butonuna basınca POST /guncelle
+// ile tetiklenir (main.go: guncelle() — installer'ı indirip kurar). Her iki
+// callback de nil verilebilir (ör. testlerde), o durumda ilgili uç yalnız 200 döner.
+func Yeni(isletmeAd, surum string, ozet func() Ozet, gunluk func(int) []string, onOdaklan, onGuncelle func()) *Sunucu {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	uri := template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(logoPNG))
 	return &Sunucu{
-		Token:     hex.EncodeToString(b),
-		ad:        isletmeAd,
-		surum:     surum,
-		ozet:      ozet,
-		gunluk:    gunluk,
-		sablon:    template.Must(template.New("s").Parse(sayfaHTML)),
-		logoURI:   uri,
-		onOdaklan: onOdaklan,
+		Token:      hex.EncodeToString(b),
+		ad:         isletmeAd,
+		surum:      surum,
+		ozet:       ozet,
+		gunluk:     gunluk,
+		sablon:     template.Must(template.New("s").Parse(sayfaHTML)),
+		logoURI:    uri,
+		onOdaklan:  onOdaklan,
+		onGuncelle: onGuncelle,
 	}
 }
 
@@ -144,6 +152,24 @@ func (s *Sunucu) Handler() http.Handler {
 		// pencerenin açılmasını beklemeden çıkabilir.
 		if s.onOdaklan != nil {
 			go s.onOdaklan()
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	// /guncelle — kullanıcı "Güncelle" butonuna basınca POST eder; yeni sürümün
+	// installer'ını indirip kurar (main.go: guncelle()). /odaklan ile AYNI desen:
+	// token'lı + yalnız POST + callback ASENKRON tetiklenir ki 200 hemen dönsün
+	// (indirme uzun sürebilir; buton tarafı yanıtı beklemez).
+	mux.HandleFunc("/guncelle", func(w http.ResponseWriter, r *http.Request) {
+		if !s.yetkili(r) {
+			http.Error(w, "yetkisiz", http.StatusForbidden)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "yalnız POST", http.StatusMethodNotAllowed)
+			return
+		}
+		if s.onGuncelle != nil {
+			go s.onGuncelle()
 		}
 		w.WriteHeader(http.StatusOK)
 	})

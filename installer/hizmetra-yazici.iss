@@ -48,6 +48,14 @@ SetupIconFile=..\assets\hizmetra.ico
 ; olmadan Inno jenerik bir simge gösteriyordu (emre 2026-08-16: "denetim
 ; masasında logosu yok"). {app}\hizmetra.ico [Files] ile kopyalanır (aşağıda).
 UninstallDisplayIcon={app}\hizmetra.ico
+; AppMutex — uygulamanın tuttuğu tek-kopya mutex'iyle BİREBİR aynı ad
+; (cmd/hizmetra-kopru/platform_windows.go: mutexAdi = "Global\HizmetraKopruTekKopya").
+; Böylece installer (kurulum VEYA in-app güncelleme sırasında) çalışan uygulamayı
+; ALGILAR ve "Hizmetra Yazıcı çalışıyor, lütfen kapatın" der — exe dosyasını
+; kilitliyken üstüne yazmaya çalışıp başarısız olmaz. In-app güncelleme akışında
+; (guncelle(), main.go) uygulama installer'ı başlatmadan HEMEN ÖNCE mutex'i bırakıp
+; kendini kapattığı için bu kontrol geçilir; kalan tek risk elle kurulumdur.
+AppMutex=Global\HizmetraKopruTekKopya
 ; Kayıt+kısayol dosyaları küçük; sıkıştırma ayarı gerekmez (Inno varsayılanı yeterli).
 
 [Tasks]

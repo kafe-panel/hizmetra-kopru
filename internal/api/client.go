@@ -29,6 +29,13 @@ var ErrYetkisiz = errors.New("kopru: yetkisiz (token geçersiz veya cihaz iptal 
 // ErrKodGecersiz — eşleştirme kodu yanlış/süresi dolmuş/kullanılmış (404).
 var ErrKodGecersiz = errors.New("kopru: kurulum kodu geçersiz")
 
+// ErrGecici — geçici ağ-geçidi hatası (HTTP 502/503/504). Cloudflare/Render,
+// uzun-bekleme (long-poll) sırasında araya girip bunu döndürebilir; iş yine de
+// gelir (fiş çıkar). GEÇİCİDİR: çağıran taraf SESSİZCE yeniden denemeli —
+// kullanıcıya "kopuk"/kırmızı hata gösterMEZ ve logu spam'lemeZ (bkz.
+// internal/kopru/dongu.go IsDongusu). ErrYetkisiz (401) deseninin ikizidir.
+var ErrGecici = errors.New("kopru: geçici ağ-geçidi hatası (502/503/504)")
+
 // Yazici — ajanın bulduğu bir yazıcı (nabızla sunucuya bildirilir).
 type Yazici struct {
 	Ad    string `json:"ad"`
@@ -108,6 +115,15 @@ func (c *Client) istek(metot, yol string, govde any, cikti any, timeout time.Dur
 	if cevap.StatusCode == http.StatusUnauthorized {
 		return ErrYetkisiz
 	}
+	// 502/503/504 — geçici ağ-geçidi hatası (Cloudflare/Render long-poll'a araya
+	// girer). Gövde çoğu zaman JSON DEĞİL HTML'dir; çözümlemeye çalışma (yoksa
+	// "cevap çözümlenemedi" gürültüsü çıkar), doğrudan ErrGecici dön ki çağıran
+	// SESSİZCE yeniden denesin (bkz. ErrGecici / dongu.go IsDongusu).
+	if cevap.StatusCode == http.StatusBadGateway ||
+		cevap.StatusCode == http.StatusServiceUnavailable ||
+		cevap.StatusCode == http.StatusGatewayTimeout {
+		return ErrGecici
+	}
 	ham, err := io.ReadAll(io.LimitReader(cevap.Body, 8<<20)) // 8MB tavan
 	if err != nil {
 		return fmt.Errorf("kopru: cevap okunamadı: %w", err)
@@ -132,9 +148,9 @@ func (c *Client) istek(metot, yol string, govde any, cikti any, timeout time.Dur
 
 // EslestirCevap — POST /eslestir dönüşü.
 type EslestirCevap struct {
-	Token      string `json:"token"`
-	CihazID    int64  `json:"cihaz_id"`
-	IsletmeAd  string `json:"isletme_ad"`
+	Token     string `json:"token"`
+	CihazID   int64  `json:"cihaz_id"`
+	IsletmeAd string `json:"isletme_ad"`
 }
 
 // Eslestir — 6 haneli kurulum kodunu kalıcı cihaz token'ına çevirir.
@@ -155,8 +171,8 @@ func (c *Client) Eslestir(kod, ad, makine, surum, isletimSistemi string) (*Esles
 // sunucu cihaz sayısı arttığında PollSn'i büyütüp long-poll'u kısaltarak
 // ajanı güncellemeden kısa-poll'a geçirebilir (master plan §0, V1→V2→V3).
 type NabizCevap struct {
-	OK     bool `json:"ok"`
-	PollSn int  `json:"poll_sn"`
+	OK      bool `json:"ok"`
+	PollSn  int  `json:"poll_sn"`
 	BekleSn *int `json:"bekle_sn,omitempty"` // opsiyonel; yoksa PollSn kullanılır
 }
 

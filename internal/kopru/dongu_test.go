@@ -194,6 +194,47 @@ func TestYetkisizDurumaYansir(t *testing.T) {
 	}
 }
 
+// TestGecici502DurumuBozmaz — long-poll 502/503/504 alınca ajan "kopuk"
+// GÖSTERMEZ: hataIsle çağrılmaz, Bagli/SonHata bozulmaz (nabız Bagli'yi yönetir).
+// emre 2026-08-17: "diyip diyip duruyor ama fişi de çıkartıyor" — geçici ağ-geçidi
+// hatası kullanıcıya kırmızı hata olarak gösterilmemeli, sessizce yeniden denenmeli.
+func TestGecici502DurumuBozmaz(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Cloudflare/Render tipik olarak JSON DEĞİL HTML gövde döner.
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("<html><body>Bad Gateway</body></html>"))
+	}))
+	defer srv.Close()
+
+	istemci := api.New(srv.URL)
+	istemci.Token = "k1-0-x"
+	durum := &Durum{Bagli: true} // nabız daha önce bağlı yapmıştı
+	ajan := Yeni(istemci, func(string, []byte) error { return nil },
+		func() ([]api.Yazici, error) { return nil, nil }, "test", durum)
+	ajan.direktifAyarla(0, 1)
+
+	dur := make(chan struct{})
+	bitti := make(chan struct{})
+	go func() { ajan.IsDongusu(dur); close(bitti) }()
+
+	time.Sleep(200 * time.Millisecond)
+	close(dur)
+	select {
+	case <-bitti:
+	case <-time.After(2 * time.Second):
+		t.Fatal("döngü durdurulamadı")
+	}
+
+	d := durum.Oku()
+	if !d.Bagli {
+		t.Error("geçici 502 'kopuk' gösterdi — hataIsle çağrılmamalıydı (Bagli=false)")
+	}
+	if d.SonHata != "" {
+		t.Errorf("geçici 502 korkutucu SonHata yazdı: %q", d.SonHata)
+	}
+}
+
 // TestYetkisizYenidenEslestirEsigi — art arda 401'de YetkisizGeldi (yeniden
 // eşleştirme) EŞİK 2'de TETİKLENİR, tek 401'de tetiklenmez, başarı sıfırlar.
 // emre 2026-08-17: cihaz panelden silininceç token geçersiz kalıyor, program

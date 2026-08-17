@@ -8,10 +8,12 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -72,6 +74,7 @@ func main() {
 		return
 	}
 	gunluk.Yaz("=== Hizmetra Yazıcı %s başladı ===", Surum)
+	otomatikBaslatKur() // macOS: login'de otomatik başlat; diğer OS'lerde no-op
 
 	yapilandirma, err = ayar.Yukle()
 	if err != nil {
@@ -266,6 +269,12 @@ func surumKontrolDongusu() {
 		if bilgi, err := istemci.Surum(); err == nil && bilgi.Surum != "" && bilgi.Surum != Surum {
 			gunluk.Yaz("yeni sürüm var: %s (mevcut %s)", bilgi.Surum, Surum)
 			systray.SetTooltip("Hizmetra Yazıcı — güncelleme var: " + bilgi.Surum)
+			// Durum penceresi "Güncelle" şeridini bu alanlardan gösterir:
+			// yeni sürüm + installer indirme adresi (bkz. ozetTopla, sayfa.html).
+			durum.Ayarla(func(d *kopru.Durum) {
+				d.GuncelSurum = bilgi.Surum
+				d.IndirmeURL = bilgi.IndirmeURL
+			})
 		}
 		select {
 		case <-dur:
@@ -273,6 +282,78 @@ func surumKontrolDongusu() {
 		case <-time.After(12 * time.Hour):
 		}
 	}
+}
+
+// guncelle — durum penceresindeki "Güncelle" butonuna basılınca (POST /guncelle,
+// durum sunucusunun onGuncelle callback'i olarak bağlanır) tetiklenir. Kullanıcı
+// artık panelden elle indirip kurmaz.
+//
+// Windows (birincil hedef): installer'ı %TEMP%'e indir → tek-kopya kilidini bırak
+// → installer'ı çalıştır → uygulamadan çık. Çıkış ŞART: çalışan exe'yi Windows
+// kilitler; installer yeni sürümü ancak biz kapandıktan sonra yazabilir, sonra
+// [Run] adımıyla yeni sürümü açar. Kilit bırakılır ki installer'ın AppMutex
+// kontrolü (bkz. installer/hizmetra-yazici.iss) bizi "çalışıyor" görüp durmasın.
+//
+// Windows dışı (macOS .dmg / Linux .deb): sessiz kurulum yok → indirme adresini
+// tarayıcıda aç, kullanıcı elle kursun. Hatalar gunluk'a yazılır; günlük satırları
+// durum penceresinin fiş şeridinde görünür (kullanıcı sonucu orada görür).
+func guncelle() {
+	d := durum.Oku()
+	indirmeURL := d.IndirmeURL
+	if indirmeURL == "" {
+		gunluk.Yaz("güncelle hatası: indirme adresi yok, güncelleme iptal edildi")
+		return
+	}
+
+	if runtime.GOOS != "windows" {
+		gunluk.Yaz("güncelle: Windows dışı işletim sistemi — indirme tarayıcıda açılıyor (elle kurulum)")
+		tarayicidaAc(indirmeURL)
+		return
+	}
+
+	gunluk.Yaz("güncelle: yeni sürüm (%s) installer'ı indiriliyor…", d.GuncelSurum)
+	hedef, err := installerIndir(indirmeURL)
+	if err != nil {
+		gunluk.Yaz("güncelle hatası: installer indirilemedi: %v", err)
+		return
+	}
+	// Kilidi bırak: installer'ın AppMutex kontrolü bizi "çalışıyor" görmesin ve
+	// installer'ın [Run] ile açacağı yeni kopya tek-kopya kilidini alabilsin.
+	tekKopyaKilidiBirak()
+	if err := exec.Command(hedef).Start(); err != nil {
+		gunluk.Yaz("güncelle hatası: installer başlatılamadı: %v", err)
+		return
+	}
+	gunluk.Yaz("güncelle: installer başlatıldı, uygulama kapanıyor (yeni sürüm otomatik açılır)")
+	systray.Quit() // exe serbest kalsın ki installer üstüne yazabilsin
+}
+
+// installerIndir — indirmeURL'deki installer'ı %TEMP%\HizmetraYaziciKurulum.exe'ye
+// indirir ve dosya yolunu döner. Dosya KAPATILARAK döner: aksi halde exec.Command
+// aynı exe'yi "kullanımda" bulurdu (Windows açık handle'ı kilitler).
+func installerIndir(indirmeURL string) (string, error) {
+	hedef := filepath.Join(os.TempDir(), "HizmetraYaziciKurulum.exe")
+	istemciHTTP := &http.Client{Timeout: 5 * time.Minute}
+	cevap, err := istemciHTTP.Get(indirmeURL)
+	if err != nil {
+		return "", err
+	}
+	defer cevap.Body.Close()
+	if cevap.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("beklenmeyen HTTP durumu: %d", cevap.StatusCode)
+	}
+	f, err := os.Create(hedef)
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(f, cevap.Body); err != nil {
+		_ = f.Close()
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	return hedef, nil
 }
 
 func trayHazir() {
@@ -402,7 +483,7 @@ func kisalt(s string, n int) string {
 // digerKopyayaOdaklanDene). Kayıt başarısız olsa da ajan çalışmaya devam eder;
 // yalnız ikinci kopyanın "öne getir" sinyali işe yaramaz (sessizce çıkar).
 func baslatDurumSunucusu() {
-	s := durumsrv.Yeni("Hizmetra Yazıcı", Surum, ozetTopla, gunluk.SonSatirlar, odaklanGeldi)
+	s := durumsrv.Yeni("Hizmetra Yazıcı", Surum, ozetTopla, gunluk.SonSatirlar, odaklanGeldi, guncelle)
 	u, port, err := s.Baslat()
 	if err != nil {
 		gunluk.Yaz("durum penceresi başlatılamadı: %v", err)
@@ -470,14 +551,16 @@ func ozetTopla() durumsrv.Ozet {
 		sonBaski = d.SonBaski.Format("15:04")
 	}
 	return durumsrv.Ozet{
-		Bagli:     d.Bagli,
-		IsletmeAd: yapilandirma.IsletmeAd,
-		Sunucu:    yapilandirma.SunucuAdresi(),
-		Surum:     Surum,
-		Yazicilar: yaziciAdlari,
-		SonIsler:  sonIsSatirlari(20),
-		SonHata:   d.SonHata,
-		SonBaski:  sonBaski,
+		Bagli:       d.Bagli,
+		IsletmeAd:   yapilandirma.IsletmeAd,
+		Sunucu:      yapilandirma.SunucuAdresi(),
+		Surum:       Surum,
+		Yazicilar:   yaziciAdlari,
+		SonIsler:    sonIsSatirlari(20),
+		SonHata:     d.SonHata,
+		SonBaski:    sonBaski,
+		GuncelSurum: d.GuncelSurum,
+		IndirmeURL:  d.IndirmeURL,
 	}
 }
 

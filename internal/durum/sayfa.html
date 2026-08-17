@@ -191,6 +191,31 @@
   .fis-satir.err .fis-mesaj { color: var(--kirmizi); }
   .fis-bos { color: var(--fis-soluk); text-align: center; padding: 18px 0; font-style: italic; }
 
+  /* Güncelleme şeridi — sunucuda yeni sürüm çıkınca EN ÜSTTE belirir */
+  .guncelle-serit {
+    display: flex; align-items: center; gap: 14px;
+    background: color-mix(in srgb, var(--teal) 12%, var(--yuzey));
+    border: 1px solid color-mix(in srgb, var(--teal) 42%, var(--cizgi));
+    border-radius: 12px;
+    padding: 13px 16px;
+    margin-bottom: 18px;
+    box-shadow: var(--golge);
+  }
+  .guncelle-metin { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 auto; }
+  .guncelle-baslik { font-size: 14px; font-weight: 650; color: var(--teal-2); letter-spacing: -.01em; }
+  .guncelle-alt { font-size: 12.5px; color: var(--metin-2); overflow-wrap: anywhere; }
+  .guncelle-dugme {
+    flex: 0 0 auto;
+    background: var(--teal); color: #fff;
+    border: 0; cursor: pointer;
+    font-family: inherit; font-weight: 600; font-size: 13.5px;
+    padding: 9px 18px; border-radius: 9px;
+    box-shadow: var(--golge);
+    transition: background .15s;
+  }
+  .guncelle-dugme:hover { background: var(--teal-2); }
+  .guncelle-dugme:disabled { opacity: .6; cursor: default; }
+
   /* Alt */
   .alt { display: flex; align-items: center; gap: 14px; margin-top: 20px; flex-wrap: wrap; }
   .panel-dugme {
@@ -222,6 +247,14 @@
       </div>
       <div class="serit-bosluk"></div>
     </header>
+
+    <div class="guncelle-serit" id="guncelleSerit" style="display:none">
+      <div class="guncelle-metin">
+        <div class="guncelle-baslik">Yeni sürüm hazır</div>
+        <div class="guncelle-alt" id="guncelleAlt"></div>
+      </div>
+      <button class="guncelle-dugme" id="guncelleDugme" type="button">Güncelle</button>
+    </div>
 
     <noscript><div class="uyari">Bu durum penceresi için tarayıcıda JavaScript gerekir.</div></noscript>
 
@@ -342,7 +375,40 @@ function ciz(v) {
   } else {
     panelLink.style.display = "none";
   }
+
+  // Güncelleme şeridi: sunucuda daha yeni bir sürüm varsa (guncel_surum dolu VE
+  // çalışan sürümden farklı) en üstte "Güncelle" butonlu şeridi göster.
+  const gSerit = document.getElementById("guncelleSerit");
+  const gAlt = document.getElementById("guncelleAlt");
+  if (oz.guncel_surum && oz.guncel_surum !== oz.surum) {
+    gAlt.textContent = "Sürüm " + oz.guncel_surum + " indirilip kurulacak — şu an v" + (oz.surum || "?");
+    gSerit.style.display = "";
+  } else {
+    gSerit.style.display = "none";
+  }
 }
+
+// "Güncelle" → POST /guncelle: sunucu tarafı (Go) installer'ı indirir, çalıştırır
+// ve uygulamadan çıkar; bu sayfa birazdan yanıt vermez olur. İndirme/başlatma
+// hata verirse uygulama kapanmaz — o durumda butonu 2 dk sonra tekrar etkinleştir
+// (hata satırı fiş günlüğünde görünür).
+const gDugme = document.getElementById("guncelleDugme");
+gDugme.addEventListener("click", async function() {
+  gDugme.disabled = true;
+  gDugme.textContent = "İndiriliyor…";
+  try {
+    const r = await fetch("/guncelle?t=" + TOKEN, { method: "POST" });
+    if (!r.ok) throw new Error("durum " + r.status);
+    gDugme.textContent = "Güncelleniyor…";
+    setTimeout(function() {
+      gDugme.disabled = false;
+      gDugme.textContent = "Güncelle";
+    }, 120000);
+  } catch (e) {
+    gDugme.disabled = false;
+    gDugme.textContent = "Güncelle";
+  }
+});
 
 async function tazele() {
   try {

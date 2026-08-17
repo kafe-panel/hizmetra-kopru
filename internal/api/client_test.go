@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -142,6 +143,26 @@ func TestYetkisiz401(t *testing.T) {
 	}
 	if _, err := c.Nabiz(nil, "0.1.0"); err != ErrYetkisiz {
 		t.Fatalf("ErrYetkisiz bekleniyordu, gelen: %v", err)
+	}
+}
+
+// TestGeciciAgGecidiHatasi — 502/503/504 → ErrGecici. Cloudflare/Render bu
+// hatalarda çoğu zaman JSON DEĞİL HTML gövde döner; istemci gövdeyi çözmeye
+// ÇALIŞMADAN (yoksa "cevap çözümlenemedi" gürültüsü) doğrudan ErrGecici döner.
+func TestGeciciAgGecidiHatasi(t *testing.T) {
+	for _, kod := range []int{http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout} {
+		c := sunucuKur(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(kod)
+			_, _ = w.Write([]byte("<html><head><title>Bad Gateway</title></head><body>502</body></html>"))
+		})
+		c.Token = "k1-0-x"
+		if _, err := c.Isler(0); !errors.Is(err, ErrGecici) {
+			t.Errorf("HTTP %d için ErrGecici bekleniyordu, gelen: %v", kod, err)
+		}
+		if _, err := c.Nabiz(nil, "0.1.0"); !errors.Is(err, ErrGecici) {
+			t.Errorf("nabız HTTP %d için ErrGecici bekleniyordu, gelen: %v", kod, err)
+		}
 	}
 }
 

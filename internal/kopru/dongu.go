@@ -20,6 +20,11 @@ type Durum struct {
 	SonBaski   time.Time
 	IsletmeAd  string
 	YaziciSayi int
+	// GuncelSurum/IndirmeURL — sunucudaki daha yeni ajan sürümü + installer
+	// indirme adresi (main.go surumKontrolDongusu doldurur). Boşsa güncelleme
+	// yok. Durum penceresi bunları okuyup "Güncelle" şeridini gösterir.
+	GuncelSurum string
+	IndirmeURL  string
 }
 
 func (d *Durum) Ayarla(f func(*Durum)) {
@@ -34,6 +39,7 @@ func (d *Durum) Oku() Durum {
 	return Durum{
 		Bagli: d.Bagli, SonHata: d.SonHata, SonBaski: d.SonBaski,
 		IsletmeAd: d.IsletmeAd, YaziciSayi: d.YaziciSayi,
+		GuncelSurum: d.GuncelSurum, IndirmeURL: d.IndirmeURL,
 	}
 }
 
@@ -60,8 +66,8 @@ type Ajan struct {
 
 	// bekleSn/pollSn — SUNUCU DİREKTİFİ (nabız cevabı). Ajan bunlara uyar;
 	// böylece sunucu 1000 cihazda ajanı güncellemeden kısa-poll'a geçirir.
-	bekleSn int
-	pollSn  int
+	bekleSn   int
+	pollSn    int
 	ayarKilit sync.Mutex
 
 	// YetkisizGeldi — token KALICI geçersizleşince (art arda 401: cihaz panelden
@@ -185,6 +191,13 @@ func (a *Ajan) nabizAt() {
 // IsDongusu — işleri çeker, basar, sonucu bildirir. dur kapanınca çıkar.
 func (a *Ajan) IsDongusu(dur <-chan struct{}) {
 	geriCekilme := time.Second
+	// Geçici ağ-geçidi (502/503/504) gürültü kısması: long-poll sırasında
+	// Cloudflare/Render araya girip bunu döndürebilir; iş yine gelir. Kendi
+	// (kısa) geri çekilmesi + sayaçla kısılan logu vardır — kullanıcıya
+	// "kopuk" GÖSTERİLMEZ (nabız Bagli'yi zaten doğru yönetir).
+	geciciGeri := time.Second
+	var geciciSayac int
+	var geciciSonLog time.Time
 	for {
 		select {
 		case <-dur:
@@ -208,6 +221,24 @@ func (a *Ajan) IsDongusu(dur <-chan struct{}) {
 				}
 				continue
 			}
+			if errors.Is(err, api.ErrGecici) {
+				// Geçici ağ-geçidi hatası (502/503/504): Cloudflare/Render
+				// long-poll'a araya girdi ama iş yine gelir; nabız Bagli'yi
+				// yönetir. hataIsle ÇAĞIRMA (kullanıcıya "kopuk"/kırmızı hata
+				// yazma) — SESSİZCE, kısa geri çekilmeyle yeniden dene ve logu
+				// KIS: art arda aynı hatayı en fazla ~5 dakikada bir yaz (sayaçla).
+				geciciSayac++
+				if geciciSonLog.IsZero() || time.Since(geciciSonLog) > 5*time.Minute {
+					gunluk.Yaz("geçici ağ-geçidi hatası (502/503/504) ×%d — sessiz yeniden deneniyor", geciciSayac)
+					geciciSonLog = time.Now()
+					geciciSayac = 0
+				}
+				if bekleVeyaDur(dur, geciciGeri) {
+					return
+				}
+				geciciGeri = min(geciciGeri*2, 15*time.Second)
+				continue
+			}
 			a.hataIsle("iş çekme", err)
 			// Üstel geri çekilme + jitter (uyanma/ağ kopması sonrası sürü etkisi yok).
 			uyku := geriCekilme + time.Duration(rand.Int63n(int64(geriCekilme/5+1)))
@@ -218,7 +249,8 @@ func (a *Ajan) IsDongusu(dur <-chan struct{}) {
 			continue
 		}
 		geriCekilme = time.Second
-		a.yetkisizSifirla() // başarılı iş çekme → 401 sayacı sıfırlanır
+		geciciGeri = time.Second // başarılı çekme → geçici-hata geri çekilmesi de sıfırlanır
+		a.yetkisizSifirla()      // başarılı iş çekme → 401 sayacı sıfırlanır
 		a.Durum.Ayarla(func(d *Durum) { d.Bagli = true; d.SonHata = "" })
 
 		if len(isler) == 0 {

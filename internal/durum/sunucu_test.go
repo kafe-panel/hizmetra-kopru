@@ -12,7 +12,7 @@ import (
 )
 
 func TestDurumSayfasiTokenIster(t *testing.T) {
-	d := Yeni("Test Kafe", "0.2.0", func() Ozet { return Ozet{Bagli: true} }, func(int) []string { return nil }, nil)
+	d := Yeni("Test Kafe", "0.2.0", func() Ozet { return Ozet{Bagli: true} }, func(int) []string { return nil }, nil, nil)
 	srv := httptest.NewServer(d.Handler())
 	defer srv.Close()
 	r, _ := http.Get(srv.URL + "/") // token yok
@@ -31,7 +31,7 @@ func TestDurumSayfasiTokenIster(t *testing.T) {
 func TestSayfaIsletmeAdiVeYaziciGosterir(t *testing.T) {
 	d := Yeni("Hizmetra Yazıcı", "0.3.0", func() Ozet {
 		return Ozet{Bagli: true, IsletmeAd: "Çokluşubetemiz", Yazicilar: []string{"POS-80"}}
-	}, func(int) []string { return []string{"15:04:05  iş #7 → POS-80 (12 bayt, tip=kasa)"} }, nil)
+	}, func(int) []string { return []string{"15:04:05  iş #7 → POS-80 (12 bayt, tip=kasa)"} }, nil, nil)
 	srv := httptest.NewServer(d.Handler())
 	defer srv.Close()
 
@@ -54,7 +54,7 @@ func TestSayfaIsletmeAdiVeYaziciGosterir(t *testing.T) {
 
 // TestVeriJSONTokensizReddedilir — /veri.json de token ister ve JSON döner.
 func TestVeriJSONTokensizReddedilir(t *testing.T) {
-	d := Yeni("Test Kafe", "0.2.0", func() Ozet { return Ozet{Bagli: true, Sunucu: "https://api.hizmetra.com"} }, func(int) []string { return nil }, nil)
+	d := Yeni("Test Kafe", "0.2.0", func() Ozet { return Ozet{Bagli: true, Sunucu: "https://api.hizmetra.com"} }, func(int) []string { return nil }, nil, nil)
 	srv := httptest.NewServer(d.Handler())
 	defer srv.Close()
 
@@ -103,7 +103,7 @@ func TestPanelURLTuret(t *testing.T) {
 func TestOdaklanTokensizReddedilirVeCallbackTetiklenmez(t *testing.T) {
 	cagrildi := false
 	d := Yeni("Test Kafe", "0.4.0", func() Ozet { return Ozet{} }, func(int) []string { return nil },
-		func() { cagrildi = true })
+		func() { cagrildi = true }, nil)
 	srv := httptest.NewServer(d.Handler())
 	defer srv.Close()
 
@@ -128,7 +128,7 @@ func TestOdaklanTokensizReddedilirVeCallbackTetiklenmez(t *testing.T) {
 func TestOdaklanTokenliCallbackTetikler(t *testing.T) {
 	cagrildi := make(chan struct{}, 1)
 	d := Yeni("Test Kafe", "0.4.0", func() Ozet { return Ozet{} }, func(int) []string { return nil },
-		func() { cagrildi <- struct{}{} })
+		func() { cagrildi <- struct{}{} }, nil)
 	srv := httptest.NewServer(d.Handler())
 	defer srv.Close()
 
@@ -149,7 +149,7 @@ func TestOdaklanTokenliCallbackTetikler(t *testing.T) {
 // TestOdaklanCallbackNilOlabilir — onOdaklan nil verilirse (main.go dışı
 // kullanım/test) /odaklan yine de 200 döner, panic OLMAZ.
 func TestOdaklanCallbackNilOlabilir(t *testing.T) {
-	d := Yeni("Test Kafe", "0.4.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil)
+	d := Yeni("Test Kafe", "0.4.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil, nil)
 	srv := httptest.NewServer(d.Handler())
 	defer srv.Close()
 
@@ -165,7 +165,7 @@ func TestOdaklanCallbackNilOlabilir(t *testing.T) {
 // TestOdaklanYalnizPostKabulEder — doğru token ama GET → 405 (metod yasağı
 // token kontrolünden SONRA gelir; tokensiz istek her zaman 403 kalır).
 func TestOdaklanYalnizPostKabulEder(t *testing.T) {
-	d := Yeni("Test Kafe", "0.4.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil)
+	d := Yeni("Test Kafe", "0.4.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil, nil)
 	srv := httptest.NewServer(d.Handler())
 	defer srv.Close()
 
@@ -178,10 +178,109 @@ func TestOdaklanYalnizPostKabulEder(t *testing.T) {
 	}
 }
 
+// TestGuncelleTokensizReddedilirVeCallbackTetiklenmez — /guncelle token ister;
+// tokensiz istekte onGuncelle ÇAĞRILMAZ (installer'ı başkası tetikleyemesin).
+func TestGuncelleTokensizReddedilirVeCallbackTetiklenmez(t *testing.T) {
+	cagrildi := false
+	d := Yeni("Test Kafe", "0.5.0", func() Ozet { return Ozet{} }, func(int) []string { return nil },
+		nil, func() { cagrildi = true })
+	srv := httptest.NewServer(d.Handler())
+	defer srv.Close()
+
+	r, err := http.Post(srv.URL+"/guncelle", "", nil) // token yok
+	if err != nil {
+		t.Fatalf("istek hatası: %v", err)
+	}
+	if r.StatusCode != http.StatusForbidden {
+		t.Fatalf("tokensiz /guncelle 403 beklenir, geldi %d", r.StatusCode)
+	}
+	if cagrildi {
+		t.Fatal("tokensiz istekte güncelle callback'i TETİKLENMEMELİ")
+	}
+}
+
+// TestGuncelleTokenliCallbackTetikler — doğru token'lı POST /guncelle, enjekte
+// edilen callback'i (main.go: guncelle() — indir+kur) tetikler ve 200 döner.
+// /odaklan gibi callback ASENKRON tetiklenir (indirme uzun sürebilir; 200 hemen
+// dönmeli) — bu yüzden kanalla POLLANIR.
+func TestGuncelleTokenliCallbackTetikler(t *testing.T) {
+	cagrildi := make(chan struct{}, 1)
+	d := Yeni("Test Kafe", "0.5.0", func() Ozet { return Ozet{} }, func(int) []string { return nil },
+		nil, func() { cagrildi <- struct{}{} })
+	srv := httptest.NewServer(d.Handler())
+	defer srv.Close()
+
+	r, err := http.Post(srv.URL+"/guncelle?t="+d.Token, "", nil)
+	if err != nil {
+		t.Fatalf("istek hatası: %v", err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("tokenli /guncelle 200 beklenir, geldi %d", r.StatusCode)
+	}
+	select {
+	case <-cagrildi:
+	case <-time.After(2 * time.Second):
+		t.Fatal("güncelle callback'i zamanında (asenkron) tetiklenmedi")
+	}
+}
+
+// TestGuncelleYalnizPostKabulEder — doğru token ama GET → 405; onGuncelle nil
+// verilse de (test) panic olmadan 405/200 döner.
+func TestGuncelleYalnizPostKabulEder(t *testing.T) {
+	d := Yeni("Test Kafe", "0.5.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil, nil)
+	srv := httptest.NewServer(d.Handler())
+	defer srv.Close()
+
+	r, err := http.Get(srv.URL + "/guncelle?t=" + d.Token)
+	if err != nil {
+		t.Fatalf("istek hatası: %v", err)
+	}
+	if r.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("GET /guncelle 405 beklenir, geldi %d", r.StatusCode)
+	}
+	// onGuncelle nil iken tokenli POST yine 200 dönmeli (panic yok).
+	r2, err := http.Post(srv.URL+"/guncelle?t="+d.Token, "", nil)
+	if err != nil {
+		t.Fatalf("istek hatası: %v", err)
+	}
+	if r2.StatusCode != http.StatusOK {
+		t.Fatalf("nil callback ile tokenli POST /guncelle 200 beklenir, geldi %d", r2.StatusCode)
+	}
+}
+
+// TestGuncelSurumVeriJSONdaGorunur — Ozet.GuncelSurum/IndirmeURL alanları
+// /veri.json'da guncel_surum/indirme_url olarak görünür (sayfa "Güncelle"
+// şeridini bu alanlardan gösterir).
+func TestGuncelSurumVeriJSONdaGorunur(t *testing.T) {
+	d := Yeni("Test Kafe", "0.5.0", func() Ozet {
+		return Ozet{Bagli: true, Surum: "0.5.0", GuncelSurum: "0.6.0", IndirmeURL: "https://x/HizmetraYaziciKurulum.exe"}
+	}, func(int) []string { return nil }, nil, nil)
+	srv := httptest.NewServer(d.Handler())
+	defer srv.Close()
+
+	r, err := http.Get(srv.URL + "/veri.json?t=" + d.Token)
+	if err != nil {
+		t.Fatalf("istek hatası: %v", err)
+	}
+	defer r.Body.Close()
+	var veri struct {
+		Ozet Ozet `json:"ozet"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&veri); err != nil {
+		t.Fatalf("JSON çözülemedi: %v", err)
+	}
+	if veri.Ozet.GuncelSurum != "0.6.0" {
+		t.Errorf("guncel_surum JSON'da yok/yanlış: %q", veri.Ozet.GuncelSurum)
+	}
+	if veri.Ozet.IndirmeURL != "https://x/HizmetraYaziciKurulum.exe" {
+		t.Errorf("indirme_url JSON'da yok/yanlış: %q", veri.Ozet.IndirmeURL)
+	}
+}
+
 // TestBaslatPortDondurur — Baslat artık dinlediği portu da döndürür (v0.4.0:
 // ikinci kopyanın /odaklan'a ulaşabilmesi için bu port ayar dosyasına yazılır).
 func TestBaslatPortDondurur(t *testing.T) {
-	d := Yeni("Test Kafe", "0.4.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil)
+	d := Yeni("Test Kafe", "0.4.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil, nil)
 	url, port, err := d.Baslat()
 	if err != nil {
 		t.Fatalf("Baslat hata verdi: %v", err)
