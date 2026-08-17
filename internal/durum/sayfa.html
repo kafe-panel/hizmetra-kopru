@@ -227,6 +227,17 @@
     transition: background .15s;
   }
   .panel-dugme:hover { background: var(--teal-2); }
+  /* İkincil (dış çizgili) buton — "Yeniden Eşleştir" gibi ikincil eylemler */
+  .ikincil-dugme {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: transparent; color: var(--metin-2);
+    border: 1px solid var(--cizgi);
+    cursor: pointer; font-family: inherit; font-weight: 600; font-size: 13px;
+    padding: 8px 14px; border-radius: 9px;
+    transition: border-color .15s, color .15s;
+  }
+  .ikincil-dugme:hover { border-color: var(--teal); color: var(--teal-2); }
+  .ikincil-dugme:disabled { opacity: .6; cursor: default; }
   .alt-ipuc { font-size: 12px; color: var(--metin-3); }
 
   noscript .uyari { display: block; background: var(--yuzey); border: 1px solid var(--cizgi); border-radius: 10px; padding: 14px; color: var(--metin-2); }
@@ -287,6 +298,7 @@
 
     <div class="alt">
       <a class="panel-dugme" id="panelLink" href="#" target="_blank" rel="noopener" style="display:none">Yönetim Panelini Aç ↗</a>
+      <button class="ikincil-dugme" id="yenidenDugme" type="button">Yeniden Eşleştir (kod gir)</button>
       <span class="alt-ipuc">Bu pencere 3 saniyede bir kendini yeniler.</span>
     </div>
   </div>
@@ -407,6 +419,28 @@ gDugme.addEventListener("click", async function() {
   } catch (e) {
     gDugme.disabled = false;
     gDugme.textContent = "Güncelle";
+  }
+});
+
+// "Yeniden Eşleştir (kod gir)" → önce onay, sonra POST /yeniden-eslestir: sunucu
+// (Go) token'ı temizler ve süreci yeniden başlatır → yeni süreç 6 haneli kod
+// ekranını açar (farklı hesap/kafe). Bu sayfa birazdan yanıt vermez olur (süreç
+// yeniden başlıyor) — bu NORMALDİR.
+const yDugme = document.getElementById("yenidenDugme");
+yDugme.addEventListener("click", async function() {
+  const onay = window.confirm(
+    "Farklı bir hesaba/kafeye bağlanmak için yeniden eşleştirilsin mi?\n\n" +
+    "Mevcut bağlantı kesilir ve yeni bir 6 haneli kurulum kodu istenir."
+  );
+  if (!onay) return;
+  yDugme.disabled = true;
+  yDugme.textContent = "Yeniden başlatılıyor…";
+  try {
+    await fetch("/yeniden-eslestir?t=" + TOKEN, { method: "POST" });
+    // Başarılıysa süreç yeniden başlar; buton eski haline DÖNMEZ (sayfa kapanır).
+  } catch (e) {
+    yDugme.disabled = false;
+    yDugme.textContent = "Yeniden Eşleştir (kod gir)";
   }
 });
 

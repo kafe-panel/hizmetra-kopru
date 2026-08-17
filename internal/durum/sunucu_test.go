@@ -277,6 +277,73 @@ func TestGuncelSurumVeriJSONdaGorunur(t *testing.T) {
 	}
 }
 
+// TestYenidenEslestirTokensizReddedilir — /yeniden-eslestir token ister; tokensiz
+// istekte callback ÇAĞRILMAZ (başkası token'ı temizleyip yeniden başlatamasın).
+func TestYenidenEslestirTokensizReddedilir(t *testing.T) {
+	cagrildi := false
+	d := Yeni("Test Kafe", "0.7.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil, nil)
+	d.YenidenEslestirAyarla(func() { cagrildi = true })
+	srv := httptest.NewServer(d.Handler())
+	defer srv.Close()
+
+	r, err := http.Post(srv.URL+"/yeniden-eslestir", "", nil) // token yok
+	if err != nil {
+		t.Fatalf("istek hatası: %v", err)
+	}
+	if r.StatusCode != http.StatusForbidden {
+		t.Fatalf("tokensiz /yeniden-eslestir 403 beklenir, geldi %d", r.StatusCode)
+	}
+	if cagrildi {
+		t.Fatal("tokensiz istekte yeniden-eşleştir callback'i TETİKLENMEMELİ")
+	}
+}
+
+// TestYenidenEslestirTokenliCallbackTetikler — doğru token'lı POST, setter ile
+// bağlanan callback'i (main.go: yenidenEslestirGovde) ASENKRON tetikler; 200 döner.
+func TestYenidenEslestirTokenliCallbackTetikler(t *testing.T) {
+	cagrildi := make(chan struct{}, 1)
+	d := Yeni("Test Kafe", "0.7.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil, nil)
+	d.YenidenEslestirAyarla(func() { cagrildi <- struct{}{} })
+	srv := httptest.NewServer(d.Handler())
+	defer srv.Close()
+
+	r, err := http.Post(srv.URL+"/yeniden-eslestir?t="+d.Token, "", nil)
+	if err != nil {
+		t.Fatalf("istek hatası: %v", err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("tokenli /yeniden-eslestir 200 beklenir, geldi %d", r.StatusCode)
+	}
+	select {
+	case <-cagrildi:
+	case <-time.After(2 * time.Second):
+		t.Fatal("yeniden-eşleştir callback'i zamanında (asenkron) tetiklenmedi")
+	}
+}
+
+// TestYenidenEslestirYalnizPost — doğru token ama GET → 405; callback set
+// edilmese de (nil) tokenli POST panic olmadan 200 döner.
+func TestYenidenEslestirYalnizPost(t *testing.T) {
+	d := Yeni("Test Kafe", "0.7.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil, nil)
+	srv := httptest.NewServer(d.Handler())
+	defer srv.Close()
+
+	r, err := http.Get(srv.URL + "/yeniden-eslestir?t=" + d.Token)
+	if err != nil {
+		t.Fatalf("istek hatası: %v", err)
+	}
+	if r.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("GET /yeniden-eslestir 405 beklenir, geldi %d", r.StatusCode)
+	}
+	r2, err := http.Post(srv.URL+"/yeniden-eslestir?t="+d.Token, "", nil)
+	if err != nil {
+		t.Fatalf("istek hatası: %v", err)
+	}
+	if r2.StatusCode != http.StatusOK {
+		t.Fatalf("nil callback ile tokenli POST 200 beklenir, geldi %d", r2.StatusCode)
+	}
+}
+
 // TestBaslatPortDondurur — Baslat artık dinlediği portu da döndürür (v0.4.0:
 // ikinci kopyanın /odaklan'a ulaşabilmesi için bu port ayar dosyasına yazılır).
 func TestBaslatPortDondurur(t *testing.T) {

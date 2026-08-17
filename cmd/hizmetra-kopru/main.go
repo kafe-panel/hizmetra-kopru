@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -31,6 +30,7 @@ import (
 	"github.com/kafe-panel/hizmetra-kopru/internal/kopru"
 	"github.com/kafe-panel/hizmetra-kopru/internal/kurulum"
 	"github.com/kafe-panel/hizmetra-kopru/internal/pencere"
+	"github.com/kafe-panel/hizmetra-kopru/internal/surum"
 	"github.com/kafe-panel/hizmetra-kopru/internal/yazdir"
 )
 
@@ -103,6 +103,11 @@ func main() {
 	go ajan.NabizDongusu(dur)
 	go ajan.IsDongusu(dur)
 	go surumKontrolDongusu()
+
+	// Kurulumdan/güncellemeden sonra ilk çalıştırmada durum penceresini bir kez
+	// göster (aksi halde ajan sessizce tepsiye gider, kullanıcı "açılmadı" sanır).
+	// Fresh eşleşmede kurulumTamamlandi zaten açtığı için burada atlanır.
+	go ilkAcilisGoster()
 
 	// Ctrl+C / kapanma sinyali (konsoldan çalıştırıldıysa).
 	sinyal := make(chan os.Signal, 1)
@@ -203,44 +208,97 @@ func kurulumTamamlandi(es kurulum.EslesmeSonucu, makineAdi string) kurulumSonuc 
 
 	time.Sleep(2 * time.Second) // sayfadaki "Bağlandı" ekranını okuyacak süre
 	durumPenceresiniAc()
+	ilkAcilisIsaretle() // pencere bu sürümde bir kez gösterildi → main'deki ilkAcilisGoster tekrar açmasın
 	return kurulumDevam
 }
 
-// yenidenEslestirBir — yenidenEslestir yalnız BİR kez çalışsın (iki döngü aynı
-// anda 401 alıp iki kez tetikleyebilir; süreç zaten yeniden başlıyor).
+// ilkAcilisGoster — kurulumdan/güncellemeden SONRA ilk çalıştırmada durum
+// penceresini BİR KEZ otomatik açar (emre 2026-08-17: ajan sessizce tepside
+// açılıyordu, kullanıcı "açılmadı" sanıyordu). SÜRÜM BAZLI: yalnız
+// SonGosterilenSurum çalışan Surum'dan farklıysa açar — böylece her login'de
+// değil, yalnız yeni kurulum/güncelleme sonrası ilk açılışta görünür. Fresh
+// eşleşmede kurulumTamamlandi zaten pencereyi açıp işareti koyduğu için atlanır.
+func ilkAcilisGoster() {
+	if yapilandirma.SonGosterilenSurum == Surum {
+		return
+	}
+	gunluk.Yaz("ilk açılış/güncelleme sonrası: durum penceresi bir kez gösteriliyor (sürüm %s)", Surum)
+	durumPenceresiniAc()
+	ilkAcilisIsaretle()
+}
+
+// ilkAcilisIsaretle — SonGosterilenSurum'u çalışan sürüme yazar (pencere bu
+// sürümde bir kez gösterildi). Hem ilkAcilisGoster hem kurulumTamamlandi çağırır.
+func ilkAcilisIsaretle() {
+	if yapilandirma.SonGosterilenSurum == Surum {
+		return
+	}
+	yapilandirma.SonGosterilenSurum = Surum
+	if err := ayar.Kaydet(yapilandirma); err != nil {
+		gunluk.Yaz("son gösterilen sürüm kaydedilemedi: %v", err)
+	}
+}
+
+// yenidenEslestirBir — 401-otomatik yeniden eşleşme yalnız BİR kez çalışsın (iki
+// döngü aynı anda 401 alıp iki kez tetikleyebilir; süreç zaten yeniden başlıyor).
 var yenidenEslestirBir sync.Once
 
 // yenidenEslestir — token KALICI geçersiz (art arda 401: cihaz panelden silinmiş).
-// Config'teki token'ı temizler ve süreci YENİDEN BAŞLATIR: yeni süreç boş token
-// görüp ilkKurulum'u (eşleştirme penceresini) açar, kullanıcı yeni 6 haneli kodu
-// girer. Eski davranış "Eşleştirme geçersiz" gösterip çıkmazda kalıyordu; kod
-// girecek yer yoktu (emre 2026-08-17: Denetim Masası'ndan kaldırıp yeniden
-// kurunca eşleşemedi). ajan.YetkisizGeldi olarak bağlanır (dongu.go).
+// ajan.YetkisizGeldi olarak bağlanır (dongu.go). sync.Once ile tek sefer; çekirdek
+// iş yenidenEslestirGovde'dedir.
+func yenidenEslestir() {
+	yenidenEslestirBir.Do(func() { yenidenEslestirGovde("token kalıcı geçersiz (401)") })
+}
+
+// kullaniciYenidenEslestir — kullanıcı tray menüsünden "Yeniden Eşleştir (kod
+// gir)" seçince: ÖNCE onay iste (kafede yanlış tıklama çalışan bağlantıyı
+// koparmasın), sonra çekirdeği çağır. Token GEÇERLİYKEN farklı bir hesaba/kafeye
+// geçmenin tek yolu budur — 401-otomatik yol yalnız token geçersizleşince tetikler
+// (emre 2026-08-17: başka hesap açıldı, token geçerli olduğu için bağlanamıyordu).
+// Durum penceresi butonu onayı sayfada (confirm()) aldığı için çekirdeği DOĞRUDAN
+// çağırır; bu tray yolu ise ayrıca zenity onayı gösterir. sync.Once KULLANMAZ:
+// kullanıcı bilinçli tıklıyor (401 yarışı değil).
+func kullaniciYenidenEslestir() {
+	onay := zenity.Question(
+		"Farklı bir hesaba/kafeye bağlanmak için yeniden eşleştirilsin mi?\n\n"+
+			"Mevcut bağlantı kesilir ve yeni bir 6 haneli kurulum kodu istenir.",
+		zenity.Title("Hizmetra Yazıcı — Yeniden Eşleştir"),
+		zenity.OKLabel("Yeniden Eşleştir"),
+		zenity.CancelLabel("Vazgeç"),
+	)
+	if onay != nil {
+		return // Vazgeç veya hata → değişiklik yapma
+	}
+	yenidenEslestirGovde("kullanıcı yeniden eşleştirmeyi seçti")
+}
+
+// yenidenEslestirGovde — ÇEKİRDEK: config'teki token'ı temizler ve süreci YENİDEN
+// BAŞLATIR: yeni süreç boş token görüp ilkKurulum'u (eşleştirme penceresini) açar,
+// kullanıcı yeni 6 haneli kodu girer. Eski davranış "Eşleştirme geçersiz" gösterip
+// çıkmazda kalıyordu; kod girecek yer yoktu (emre 2026-08-17).
 //
 // Süreç değiştirme (in-process ilkKurulum yerine): kurulumTamamlandi YENİ bir
 // api.Client yaratıyor ama çalışan ajan ESKİ istemciyi tutuyor — canlı döngüde
 // güvenli değiştirmek yarış/karmaşa demek. Temiz yeniden başlatma, KANITLANMIŞ
 // "boş token → ilkKurulum" yolunu aynen kullanır. Kilit önce bırakılır ki yeni
 // süreç tek-kopya kilidini alabilsin (bkz. tekKopyaKilidiBirak / "Güncelle" deseni).
-func yenidenEslestir() {
-	yenidenEslestirBir.Do(func() {
-		gunluk.Yaz("token kalıcı geçersiz → temizlenip yeniden eşleştirme için yeniden başlatılıyor")
-		yapilandirma.Token = ""
-		if err := ayar.Kaydet(yapilandirma); err != nil {
-			gunluk.Yaz("token temizlenemedi: %v", err)
-		}
-		exe, err := os.Executable()
-		if err != nil {
-			gunluk.Yaz("executable yolu alınamadı, yeniden başlatılamıyor: %v", err)
-			return
-		}
-		tekKopyaKilidiBirak() // yeni süreç kilidi alabilsin (aksi halde /odaklan'a düşer)
-		if err := exec.Command(exe).Start(); err != nil {
-			gunluk.Yaz("yeniden başlatma başarısız: %v", err)
-			return
-		}
-		systray.Quit() // bu süreç temiz kapansın (trayBitti → çıkış)
-	})
+func yenidenEslestirGovde(sebep string) {
+	gunluk.Yaz("%s → token temizlenip yeniden eşleştirme için yeniden başlatılıyor", sebep)
+	yapilandirma.Token = ""
+	if err := ayar.Kaydet(yapilandirma); err != nil {
+		gunluk.Yaz("token temizlenemedi: %v", err)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		gunluk.Yaz("executable yolu alınamadı, yeniden başlatılamıyor: %v", err)
+		return
+	}
+	tekKopyaKilidiBirak() // yeni süreç kilidi alabilsin (aksi halde /odaklan'a düşer)
+	if err := exec.Command(exe).Start(); err != nil {
+		gunluk.Yaz("yeniden başlatma başarısız: %v", err)
+		return
+	}
+	systray.Quit() // bu süreç temiz kapansın (trayBitti → çıkış)
 }
 
 // eslestirmeDene — kurulum kodunu bilinen sunucularda (ayar.SunucuAdaylari)
@@ -266,15 +324,29 @@ func eslestirmeDene(kod, makineAdi string) (*api.EslestirCevap, string, error) {
 
 func surumKontrolDongusu() {
 	for {
-		if bilgi, err := istemci.Surum(); err == nil && bilgi.Surum != "" && bilgi.Surum != Surum {
-			gunluk.Yaz("yeni sürüm var: %s (mevcut %s)", bilgi.Surum, Surum)
-			systray.SetTooltip("Hizmetra Yazıcı — güncelleme var: " + bilgi.Surum)
-			// Durum penceresi "Güncelle" şeridini bu alanlardan gösterir:
-			// yeni sürüm + installer indirme adresi (bkz. ozetTopla, sayfa.html).
-			durum.Ayarla(func(d *kopru.Durum) {
-				d.GuncelSurum = bilgi.Surum
-				d.IndirmeURL = bilgi.IndirmeURL
-			})
+		// SEMANTİK kıyas (surum.YeniMi): yalnız sunucu sürümü çalışandan
+		// KESİNLİKLE ileriyse güncelle şeridi gösterilir. Eski düz dizgi
+		// eşitsizliği (bilgi.Surum != Surum) hem downgrade'i "güncelle" sanıyor
+		// hem 0.10.0'ı 0.9.0'dan KÜÇÜK görüyordu ("1" < "9"). Bkz. internal/surum.
+		if bilgi, err := istemci.Surum(); err == nil && bilgi.Surum != "" && surum.YeniMi(bilgi.Surum, Surum) {
+			// Bu işletim sistemi/mimari için DOĞRU paketi seç (Windows installer,
+			// macOS .dmg, Linux .deb). Adres yoksa (eski sunucu yalnız Windows
+			// installer'ı döner) şeridi HİÇ gösterme — aksi halde "Güncelle"
+			// butonu yanlış dosyayı indirir/çalışmaz.
+			indirmeURL := bilgi.IndirmeURLIcin(runtime.GOOS, runtime.GOARCH)
+			if indirmeURL == "" {
+				gunluk.Yaz("yeni sürüm %s var ama %s/%s için indirme adresi yok — güncelle şeridi gösterilmiyor",
+					bilgi.Surum, runtime.GOOS, runtime.GOARCH)
+			} else {
+				gunluk.Yaz("yeni sürüm var: %s (mevcut %s)", bilgi.Surum, Surum)
+				systray.SetTooltip("Hizmetra Yazıcı — güncelleme var: " + bilgi.Surum)
+				// Durum penceresi "Güncelle" şeridini bu alanlardan gösterir:
+				// yeni sürüm + platforma uygun indirme adresi (bkz. ozetTopla, sayfa.html).
+				durum.Ayarla(func(d *kopru.Durum) {
+					d.GuncelSurum = bilgi.Surum
+					d.IndirmeURL = indirmeURL
+				})
+			}
 		}
 		select {
 		case <-dur:
@@ -288,72 +360,42 @@ func surumKontrolDongusu() {
 // durum sunucusunun onGuncelle callback'i olarak bağlanır) tetiklenir. Kullanıcı
 // artık panelden elle indirip kurmaz.
 //
-// Windows (birincil hedef): installer'ı %TEMP%'e indir → tek-kopya kilidini bırak
-// → installer'ı çalıştır → uygulamadan çık. Çıkış ŞART: çalışan exe'yi Windows
-// kilitler; installer yeni sürümü ancak biz kapandıktan sonra yazabilir, sonra
-// [Run] adımıyla yeni sürümü açar. Kilit bırakılır ki installer'ın AppMutex
-// kontrolü (bkz. installer/hizmetra-yazici.iss) bizi "çalışıyor" görüp durmasın.
-//
-// Windows dışı (macOS .dmg / Linux .deb): sessiz kurulum yok → indirme adresini
-// tarayıcıda aç, kullanıcı elle kursun. Hatalar gunluk'a yazılır; günlük satırları
-// durum penceresinin fiş şeridinde görünür (kullanıcı sonucu orada görür).
+// Ortak kısım BURADA: indirme adresi doğrulaması. Platform-özgü indir+kur+yeniden-aç
+// akışı guncellePlatform'dadır (guncelle_windows.go / guncelle_darwin.go /
+// guncelle_linux.go) — her biri o platformun "altın standart" sessiz güncellemesini
+// yapar. Hatalar gunluk'a yazılır; satırlar durum penceresinin fiş şeridinde görünür.
 func guncelle() {
 	d := durum.Oku()
-	indirmeURL := d.IndirmeURL
-	if indirmeURL == "" {
+	if d.IndirmeURL == "" {
 		gunluk.Yaz("güncelle hatası: indirme adresi yok, güncelleme iptal edildi")
 		return
 	}
-
-	if runtime.GOOS != "windows" {
-		gunluk.Yaz("güncelle: Windows dışı işletim sistemi — indirme tarayıcıda açılıyor (elle kurulum)")
-		tarayicidaAc(indirmeURL)
-		return
-	}
-
-	gunluk.Yaz("güncelle: yeni sürüm (%s) installer'ı indiriliyor…", d.GuncelSurum)
-	hedef, err := installerIndir(indirmeURL)
-	if err != nil {
-		gunluk.Yaz("güncelle hatası: installer indirilemedi: %v", err)
-		return
-	}
-	// Kilidi bırak: installer'ın AppMutex kontrolü bizi "çalışıyor" görmesin ve
-	// installer'ın [Run] ile açacağı yeni kopya tek-kopya kilidini alabilsin.
-	tekKopyaKilidiBirak()
-	if err := exec.Command(hedef).Start(); err != nil {
-		gunluk.Yaz("güncelle hatası: installer başlatılamadı: %v", err)
-		return
-	}
-	gunluk.Yaz("güncelle: installer başlatıldı, uygulama kapanıyor (yeni sürüm otomatik açılır)")
-	systray.Quit() // exe serbest kalsın ki installer üstüne yazabilsin
+	guncellePlatform(d.IndirmeURL, d.GuncelSurum)
 }
 
-// installerIndir — indirmeURL'deki installer'ı %TEMP%\HizmetraYaziciKurulum.exe'ye
-// indirir ve dosya yolunu döner. Dosya KAPATILARAK döner: aksi halde exec.Command
-// aynı exe'yi "kullanımda" bulurdu (Windows açık handle'ı kilitler).
-func installerIndir(indirmeURL string) (string, error) {
-	hedef := filepath.Join(os.TempDir(), "HizmetraYaziciKurulum.exe")
+// dosyaIndir — indirmeURL'deki paketi hedef yola indirir. Dosya KAPATILARAK
+// döner: aksi halde exec.Command aynı dosyayı "kullanımda" bulurdu (Windows açık
+// handle'ı kilitler). Windows installer'ı, macOS .dmg'si ve Linux .deb'i için
+// ortaktır (bkz. guncelle_*.go). 5 dk zaman aşımı: yavaş kafe hattında bile yeter.
+func dosyaIndir(indirmeURL, hedef string) error {
 	istemciHTTP := &http.Client{Timeout: 5 * time.Minute}
 	cevap, err := istemciHTTP.Get(indirmeURL)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer cevap.Body.Close()
 	if cevap.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("beklenmeyen HTTP durumu: %d", cevap.StatusCode)
+		return fmt.Errorf("beklenmeyen HTTP durumu: %d", cevap.StatusCode)
 	}
 	f, err := os.Create(hedef)
 	if err != nil {
-		return "", err
+		return err
 	}
 	if _, err := io.Copy(f, cevap.Body); err != nil {
 		_ = f.Close()
-		return "", err
+		return err
 	}
-	if err := f.Close(); err != nil {
-		return "", err
-	}
-	return hedef, nil
+	return f.Close()
 }
 
 func trayHazir() {
@@ -374,6 +416,7 @@ func trayHazir() {
 	systray.AddSeparator()
 	mGoster := systray.AddMenuItem("Uygulamayı Aç", "Hizmetra Yazıcı arayüzünü açar — bağlantı, yazıcılar ve fiş günlüğü")
 	mPanel := systray.AddMenuItem("Yönetim Panelini Aç", "Hizmetra yönetim panelini tarayıcıda açar")
+	mYeniden := systray.AddMenuItem("Yeniden Eşleştir (kod gir)", "Farklı bir hesaba/kafeye bağlan — yeni 6 haneli kurulum kodu girer")
 	systray.AddSeparator()
 	mCikis := systray.AddMenuItem("Çıkış", "Programı kapat (fişler basılmaz!)")
 
@@ -409,6 +452,9 @@ func trayHazir() {
 				durumPenceresiniAc()
 			case <-mPanel.ClickedCh:
 				tarayicidaAc(panelAdresi())
+			case <-mYeniden.ClickedCh:
+				// Ayrı goroutine: zenity onay diyaloğu menü döngüsünü bloklamasın.
+				go kullaniciYenidenEslestir()
 			case <-mCikis.ClickedCh:
 				systray.Quit()
 				return
@@ -484,6 +530,9 @@ func kisalt(s string, n int) string {
 // yalnız ikinci kopyanın "öne getir" sinyali işe yaramaz (sessizce çıkar).
 func baslatDurumSunucusu() {
 	s := durumsrv.Yeni("Hizmetra Yazıcı", Surum, ozetTopla, gunluk.SonSatirlar, odaklanGeldi, guncelle)
+	// "Yeniden Eşleştir" butonu (sayfa.html) confirm()'i sayfada aldığı için
+	// çekirdeği DOĞRUDAN çağırır (tray yolu ayrıca zenity onayı gösterir).
+	s.YenidenEslestirAyarla(func() { yenidenEslestirGovde("durum penceresinden yeniden eşleştir") })
 	u, port, err := s.Baslat()
 	if err != nil {
 		gunluk.Yaz("durum penceresi başlatılamadı: %v", err)

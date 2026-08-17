@@ -31,6 +31,14 @@ type Ayar struct {
 	// sessizce çıkar — bu nadir kenar durum için yeniden deneme YOKTUR.
 	SonBilinenPort  int    `json:"son_bilinen_port,omitempty"`
 	SonBilinenToken string `json:"son_bilinen_token,omitempty"`
+
+	// SonGosterilenSurum — durum penceresinin EN SON hangi sürümde bir kez
+	// kendiliğinden gösterildiği (v0.7.0). Kurulumdan/güncellemeden sonra ajan
+	// sessizce tepside açılıyordu; kullanıcı "açılmadı" sanıyordu (emre 2026-08-17).
+	// Startup'ta bu değer çalışan Surum'dan farklıysa pencere BİR KEZ otomatik
+	// açılır ve buraya o sürüm yazılır — böylece her login'de değil, yalnız yeni
+	// kurulum/güncelleme sonrası ilk açılışta görünür (bkz. main.go: ilkAcilisGoster).
+	SonGosterilenSurum string `json:"son_gosterilen_surum,omitempty"`
 }
 
 // VarsayilanSunucu — panel API kökü. HIZMETRA_API env'i ezer (geliştirme).

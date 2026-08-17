@@ -35,8 +35,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # SignPath onayı gelince buraya imzalama adımı eklenecek:
-      # - uses: signpath/github-action-submit-signing-request@v1
+      # NOT: Kod imzalama scaffold'u (Azure Trusted Signing / SignPath / OV-EV) aşağıdaki
+      # "installer" job'ında; primer indirme HizmetraYaziciKurulum.exe orada imzalanır.
+      # İstenirse ham hizmetra-kopru.exe de aynı yöntemle burada imzalanabilir.
 
   # macOS ikilileri (amd64 + arm64). AYRI job + macos-latest ZORUNLU: fyne.io/systray
   # macOS'ta Cocoa (Objective-C) kullanır → CGO_ENABLED=1 ŞART, ubuntu'da darwin'e
@@ -103,8 +104,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Inno Setup kur (chocolatey ön-kurulu)
-        run: choco install innosetup -y --no-progress
+      # Sürüm PİNLİ: Türkçe (Turkish.isl) Inno Setup 6.5+ ile RESMİ gelir; 6.7.1
+      # bunu içerir ve yerelde 6.7.x ile derleme doğrulandı. Pin = tekrarlanabilir
+      # yayın (gelecekteki bir 7.x .isl yolunu/Pascal API'sini değiştirip sessizce
+      # bozmasın). Bump gerekirse: yerelde iscc ile derleyip doğrula, sonra yükselt.
+      - name: Inno Setup kur (chocolatey ön-kurulu, sürüm pinli)
+        run: choco install innosetup --version=6.7.1 -y --no-progress
 
       - name: goreleaser'ın yayınladığı hizmetra-kopru.exe'yi indir
         env:
@@ -115,6 +120,32 @@ jobs:
         run: |
           $ver = "${{ github.ref_name }}" -replace '^v', ''
           iscc "/DMyAppVersion=$ver" installer\hizmetra-yazici.iss
+
+      # ─── KOD İMZALAMA (SmartScreen "bilinmeyen yayıncı" uyarısını kaldırır) ───
+      # İmzasız .exe her indiren için SmartScreen uyarısı gösterir. İMZA = güven.
+      # KARAR VERİLİNCE aşağıdaki adımlardan BİRİNİ etkinleştir (yorumu kaldır) ve
+      # ilgili secret'ları ayarla. İmzalama installer'ı ÜRETTİKTEN sonra, YÜKLEMEDEN
+      # önce yapılır. (İstenirse aynı adımla ham hizmetra-kopru.exe de imzalanabilir.)
+      #
+      # SEÇENEK A — Azure Trusted Signing (~$10/ay, Microsoft, hızlı onay, en iyi
+      #             SmartScreen itibarı). ÖNERİLEN.
+      # - name: Installer'ı imzala (Azure Trusted Signing)
+      #   uses: azure/trusted-signing-action@v0
+      #   with:
+      #     azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      #     azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      #     azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+      #     endpoint: ${{ secrets.TRUSTED_SIGNING_ENDPOINT }}      # ör. https://eus.codesigning.azure.net
+      #     trusted-signing-account-name: ${{ secrets.TRUSTED_SIGNING_ACCOUNT }}
+      #     certificate-profile-name: ${{ secrets.TRUSTED_SIGNING_PROFILE }}
+      #     files-folder: installer\Output
+      #     files-folder-filter: exe
+      #
+      # SEÇENEK B — SignPath.io (ücretsiz OSS; başvuru onayı haftalar sürebilir):
+      # - uses: signpath/github-action-submit-signing-request@v1
+      #   with: { ... SignPath organizasyon/proje/imza-politikası ... }
+      #
+      # SEÇENEK C — Klasik OV/EV sertifikası (~$200-400/yıl) + signtool.exe adımı.
 
       - name: Installer'ı release asset'i olarak yükle
         env:

@@ -226,8 +226,35 @@ func (c *Client) SonucBildir(sonuclar []Sonuc) (int, error) {
 
 // SurumBilgi — GET /api/kopru/surum (güncelleme uyarısı için).
 type SurumBilgi struct {
-	Surum      string `json:"surum"`
+	Surum string `json:"surum"`
+	// IndirmeURL — GERİYE UYUM: eski sunucu yalnız bunu döner (Windows installer).
+	// Yeni sunucu ayrıca IndirmeURLler haritasını da doldurur (platform bazlı).
 	IndirmeURL string `json:"indirme_url"`
+	// IndirmeURLler — platform → paket indirme adresi. Anahtarlar:
+	// "windows" (installer .exe), "darwin" (.dmg, evrensel), "linux_amd64" /
+	// "linux_arm64" (.deb, mimariye bağlı). Böylece macOS/Linux ajanı da DOĞRU
+	// paketi indirir (eskiden herkese Windows installer'ı gösteriliyordu — hata).
+	IndirmeURLler map[string]string `json:"indirme_urls"`
+}
+
+// IndirmeURLIcin — verilen OS/mimari için doğru paket indirme adresini seçer.
+// Öncelik: "os_arch" (Linux .deb mimariye bağlı) → "os" (Windows/macOS mimari-
+// bağımsız) → Windows için legacy IndirmeURL (eski sunucu). Uygun adres yoksa "".
+// Windows dışında legacy IndirmeURL'e DÜŞÜLMEZ: o bir .exe'dir, macOS/Linux'ta
+// işe yaramaz — adres yoksa çağıran güncelle şeridini hiç göstermez.
+func (b *SurumBilgi) IndirmeURLIcin(isletimSistemi, mimari string) string {
+	if b.IndirmeURLler != nil {
+		if u := b.IndirmeURLler[isletimSistemi+"_"+mimari]; u != "" {
+			return u
+		}
+		if u := b.IndirmeURLler[isletimSistemi]; u != "" {
+			return u
+		}
+	}
+	if isletimSistemi == "windows" {
+		return b.IndirmeURL
+	}
+	return ""
 }
 
 // Surum — sunucudaki güncel ajan sürümü. GitHub API'ye GİTMEZ (anonim 60/saat

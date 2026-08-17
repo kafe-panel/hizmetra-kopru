@@ -43,16 +43,25 @@ type Ozet struct {
 
 // Sunucu — durum penceresi HTTP sunucusu.
 type Sunucu struct {
-	Token      string
-	ad         string // üst şeritte gösterilen uygulama adı ("Hizmetra Yazıcı")
-	surum      string
-	ozet       func() Ozet
-	gunluk     func(n int) []string
-	sablon     *template.Template
-	logoURI    template.URL
-	onOdaklan  func() // /odaklan çağrılınca tetiklenir (main.go: pencere.OneGetir())
-	onGuncelle func() // /guncelle çağrılınca tetiklenir (main.go: guncelle() — indir+kur)
+	Token             string
+	ad                string // üst şeritte gösterilen uygulama adı ("Hizmetra Yazıcı")
+	surum             string
+	ozet              func() Ozet
+	gunluk            func(n int) []string
+	sablon            *template.Template
+	logoURI           template.URL
+	onOdaklan         func() // /odaklan çağrılınca tetiklenir (main.go: pencere.OneGetir())
+	onGuncelle        func() // /guncelle çağrılınca tetiklenir (main.go: guncelle() — indir+kur)
+	onYenidenEslestir func() // /yeniden-eslestir çağrılınca (main.go: token temizle + yeniden başlat)
 }
+
+// YenidenEslestirAyarla — kullanıcı durum penceresindeki "Yeniden Eşleştir"
+// butonuna basınca (POST /yeniden-eslestir) tetiklenecek callback'i bağlar
+// (main.go: yenidenEslestirGovde — token temizle + süreci yeniden başlat →
+// yeni 6-hane kod → farklı hesap/kafe). AYRI SETTER: Yeni'nin imzasını büyütüp
+// tüm mevcut çağrıları (main.go + testler) kırmamak için (onGuncelle deseninin
+// aksine sonradan eklendi). Sayfa tarafı zaten confirm() ile onay alır.
+func (s *Sunucu) YenidenEslestirAyarla(fn func()) { s.onYenidenEslestir = fn }
 
 // Yeni — durum sunucusu kurar. ozet anlık durumu, gunluk son N satırı döndürür.
 // onOdaklan — v0.4.0: aynı bilgisayarda ikinci bir kopya açılıp tek-kopya
@@ -170,6 +179,26 @@ func (s *Sunucu) Handler() http.Handler {
 		}
 		if s.onGuncelle != nil {
 			go s.onGuncelle()
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	// /yeniden-eslestir — kullanıcı "Yeniden Eşleştir (kod gir)" butonuna basınca
+	// POST eder; token'ı temizleyip süreci yeniden başlatır (main.go:
+	// yenidenEslestirGovde → boş token → ilkKurulum penceresi → yeni kod). Farklı
+	// bir hesaba/kafeye bağlanmanın YOLU budur (token geçerliyken 401-otomatik
+	// yeniden eşleşme tetiklenmez). /guncelle ile AYNI güvenlik deseni: token'lı +
+	// yalnız POST + callback ASENKRON (süreç birazdan yeniden başlar, 200 hemen dönsün).
+	mux.HandleFunc("/yeniden-eslestir", func(w http.ResponseWriter, r *http.Request) {
+		if !s.yetkili(r) {
+			http.Error(w, "yetkisiz", http.StatusForbidden)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "yalnız POST", http.StatusMethodNotAllowed)
+			return
+		}
+		if s.onYenidenEslestir != nil {
+			go s.onYenidenEslestir()
 		}
 		w.WriteHeader(http.StatusOK)
 	})

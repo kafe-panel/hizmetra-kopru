@@ -1,4 +1,4 @@
-; Hizmetra Yazıcı — Inno Setup installer (v0.4.0, plan Track C4).
+; Hizmetra Yazıcı — Inno Setup installer (v0.7.0).
 ;
 ; Tasarım ilkeleri:
 ;   - Yönetici hakkı GEREKMEZ (PrivilegesRequired=lowest) — mevcut "3 dakikada
@@ -13,16 +13,27 @@
 ;     (dosyalar silinmeden ÖNCE) — exe "--kaldir-sunucu" ile çağrılır, sunucudaki
 ;     cihaz kaydını sessizce siler (bkz. main.go, internal/api/client.go Kaldir()).
 ;
+; v0.7.0 EKLERİ:
+;   - Arayüz TÜRKÇE ([Languages] Turkish.isl — Inno 6.5+ RESMİ dili; CI 6.7.1'e
+;     pinli, bkz. release.yml). ShowLanguageDialog=no + tek dil = tr.
+;   - Mevcut kurulum bulununca ilk sayfada "Güncelle / Onar / Kaldır" paneli
+;     ([Code], yalnız ETKİLEŞİMLİ modda; sessiz güncellemede ATLANIR).
+;   - Sessiz oto-güncelleme: guncelle_windows.go installer'ı /VERYSILENT ...
+;     /CLOSEAPPLICATIONS ile çağırır → kilitli exe RM ile serbest bırakılır;
+;     kurulum sonrası [Run] "Check: WizardSilent" yeni sürümü DETERMİNİSTİK açar
+;     (RestartApplications=no — RM yeniden başlatmasına GÜVENMEYİZ, biz hızlı
+;     çıktığımız için RM kapatacak süreç bulamayabilir).
+;
 ; CI bu dosyayı .github/workflows/release.yml'deki "installer" job'ında
-; (windows-latest + chocolatey innosetup) derler; hizmetra-kopru.exe bu script
-; ile AYNI dizine indirilir (bkz. [Files] Source altında, alt dizin YOK).
+; (windows-latest + chocolatey innosetup 6.7.1) derler; hizmetra-kopru.exe bu
+; script ile AYNI dizine indirilir (bkz. [Files] Source altında, alt dizin YOK).
 
 #define MyAppName "Hizmetra Yazıcı"
 ; CI etiketten "iscc /DMyAppVersion=X.Y.Z ..." ile geçer (bkz. release.yml,
 ; installer job) — /D zaten tanımlarsa #ifndef bu satırı atlar (redefinition
-; hatası yok). Yerel ad-hoc derlemede (/D verilmeden) 0.4.0'a düşer.
+; hatası yok). Yerel ad-hoc derlemede (/D verilmeden) 0.7.0'a düşer.
 #ifndef MyAppVersion
-  #define MyAppVersion "0.4.0"
+  #define MyAppVersion "0.7.0"
 #endif
 #define MyAppPublisher "Hizmetra"
 #define MyAppExeName "hizmetra-kopru.exe"
@@ -51,12 +62,29 @@ UninstallDisplayIcon={app}\hizmetra.ico
 ; AppMutex — uygulamanın tuttuğu tek-kopya mutex'iyle BİREBİR aynı ad
 ; (cmd/hizmetra-kopru/platform_windows.go: mutexAdi = "Global\HizmetraKopruTekKopya").
 ; Böylece installer (kurulum VEYA in-app güncelleme sırasında) çalışan uygulamayı
-; ALGILAR ve "Hizmetra Yazıcı çalışıyor, lütfen kapatın" der — exe dosyasını
-; kilitliyken üstüne yazmaya çalışıp başarısız olmaz. In-app güncelleme akışında
-; (guncelle(), main.go) uygulama installer'ı başlatmadan HEMEN ÖNCE mutex'i bırakıp
-; kendini kapattığı için bu kontrol geçilir; kalan tek risk elle kurulumdur.
+; ALGILAR. Etkileşimli kurulumda "Kapatılacak uygulamalar" sayfası (Türkçe) gelir;
+; sessiz güncellemede /CLOSEAPPLICATIONS ile Restart Manager exe'yi kendi kapatır.
 AppMutex=Global\HizmetraKopruTekKopya
-; Kayıt+kısayol dosyaları küçük; sıkıştırma ayarı gerekmez (Inno varsayılanı yeterli).
+; Sessiz oto-güncelleme için: çalışan kopyayı Inno kapatabilsin (dosya kilidi
+; açılsın) AMA yeniden başlatmayı RM'ye BIRAKMA — biz hızlı çıktığımız için RM
+; kapatacak süreç bulamayabilir; yeniden açmayı [Run] "Check: WizardSilent" yapar.
+CloseApplications=yes
+RestartApplications=no
+; Tek dil (Türkçe) → dil seçme diyaloğu gösterme.
+ShowLanguageDialog=no
+
+[Languages]
+; Türkçe, Inno Setup 6.5+ ile gelen RESMİ çeviridir (compiler:Languages\Turkish.isl).
+; Tüm yerleşik mesajlar (İleri/Geri, "uygulama çalışıyor", bitiş sayfası…) Türkçe.
+Name: "tr"; MessagesFile: "compiler:Languages\Turkish.isl"
+
+[CustomMessages]
+; Projeye özel Türkçe metinler (mevcut-kurulum paneli — bkz. [Code]).
+MevcutBaslik=Mevcut kurulum bulundu
+MevcutAciklama=Hizmetra Yazıcı bu bilgisayarda zaten kurulu. Ne yapmak istersiniz?
+SecGuncelle=Güncelle — yeni sürümü mevcut kurulumun üzerine kur
+SecOnar=Onar — aynı sürümü yeniden kur
+SecKaldir=Kaldır — Hizmetra Yazıcı'yı bu bilgisayardan sil
 
 [Tasks]
 Name: "desktopicon"; Description: "Masaüstünde kısayol oluştur"; GroupDescription: "Ek görevler:"
@@ -91,7 +119,14 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "HizmetraYazici"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: startupicon; Flags: uninsdeletevalue
 
 [Run]
+; Etkileşimli kurulum bitişi: "Hizmetra Yazıcı'yı çalıştır" onay kutusu (sessizde
+; atlanır — skipifsilent).
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+; SESSİZ güncelleme yeniden-başlatması: /VERYSILENT ile kurulduğunda (oto-güncelleme
+; yolu, guncelle_windows.go) yeni sürümü DETERMİNİSTİK aç. WizardSilent yerleşik
+; support fonksiyonudur; yalnız sessiz modda True döner → etkileşimli kurulumda bu
+; satır çalışmaz (onu üstteki postinstall onay kutusu yönetir).
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: WizardSilent
 
 [UninstallRun]
 ; [UninstallRun] kaldırmanın İLK adımı olarak çalışır (dosyalar silinmeden
@@ -110,3 +145,80 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "--kaldir-sunucu"; RunOnceId: "Ka
 ; GÜNCELLEME (installer'ın üstüne kurulumu) kaldırma çalıştırmaz → eşleşme KORUNUR;
 ; yalnız gerçek KALDIR temizler — ki o zaten --kaldir-sunucu ile cihazı da siler.
 Type: filesandordirs; Name: "{userappdata}\HizmetraKopru"
+
+[Code]
+// Mevcut kurulum paneli (emre 2026-08-17): installer İngilizceydi ve çalışan
+// kopya bulununca yalnız "kapat + Tamam" diyordu; seçenek yoktu. Artık kurulu bir
+// sürüm bulununca ETKİLEŞİMLİ kurulumun ilk sayfasında Güncelle/Onar/Kaldır
+// radyo paneli çıkar. SESSİZ oto-güncelleme (/VERYSILENT) bu paneli ATLAR — hiçbir
+// sayfa gösterilmez, yanlış dal (Kaldır) tetiklenmesin diye panel hiç KURULMAZ.
+
+var
+  MevcutPage: TInputOptionWizardPage;
+  KaldirSecildi: Boolean;
+
+// AppId + "_is1" = Inno'nun kaldırma kayıt alt-anahtarı. PrivilegesRequired=lowest
+// + localappdata → kurulum HKCU altındadır. (NOT: Pascal yorumunda { } kullanılmaz;
+// GUID'in kapanış küme parantezi yorumu erken kapatırdı.)
+const
+  UninstAltAnahtar = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{D0752452-C0F4-4F3D-90F9-35A529466B16}_is1';
+
+function MevcutKaldirmaKomutu(var Komut: string): Boolean;
+begin
+  Result := RegQueryStringValue(HKCU, UninstAltAnahtar, 'UninstallString', Komut)
+    and (Komut <> '');
+end;
+
+procedure InitializeWizard;
+var
+  Komut, KuruluSurum: string;
+begin
+  { Sessiz kurulumda (oto-güncelleme) sayfa gösterilmez; paneli hiç kurma. }
+  if WizardSilent then
+    Exit;
+  if not MevcutKaldirmaKomutu(Komut) then
+    Exit;
+  RegQueryStringValue(HKCU, UninstAltAnahtar, 'DisplayVersion', KuruluSurum);
+
+  MevcutPage := CreateInputOptionPage(wpWelcome,
+    ExpandConstant('{cm:MevcutBaslik}'),
+    ExpandConstant('{cm:MevcutAciklama}'),
+    '', True, False);
+  MevcutPage.Add(ExpandConstant('{cm:SecGuncelle}'));
+  MevcutPage.Add(ExpandConstant('{cm:SecOnar}'));
+  MevcutPage.Add(ExpandConstant('{cm:SecKaldir}'));
+
+  { Kurulu sürüm == kurulacak sürüm ise varsayılan "Onar", değilse "Güncelle". }
+  if KuruluSurum = '{#MyAppVersion}' then
+    MevcutPage.SelectedValueIndex := 1
+  else
+    MevcutPage.SelectedValueIndex := 0;
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  Komut: string;
+  SonucKodu: Integer;
+begin
+  Result := True;
+  if (MevcutPage <> nil) and (CurPageID = MevcutPage.ID) and (MevcutPage.SelectedValueIndex = 2) then
+  begin
+    { Kaldır: kaldırıcıyı sessizce çalıştır, sonra kurulumu iptal et. }
+    if MevcutKaldirmaKomutu(Komut) then
+    begin
+      Komut := RemoveQuotes(Komut);
+      Exec(Komut, '/VERYSILENT', '', SW_SHOW, ewWaitUntilTerminated, SonucKodu);
+    end;
+    KaldirSecildi := True;
+    WizardForm.Close;
+    Result := False;
+  end;
+end;
+
+procedure CancelButtonClick(CurPageID: Integer; var Cancel, Confirm: Boolean);
+begin
+  { Kaldır dalında WizardForm.Close çağrısı iptal akışını tetikler; "Emin misiniz?"
+    onayını gösterme (kullanıcı zaten Kaldır'ı bilerek seçti). }
+  if KaldirSecildi then
+    Confirm := False;
+end;
