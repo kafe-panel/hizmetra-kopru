@@ -110,6 +110,24 @@ func Yaz(bicim string, arg ...any) {
 	halkayaYaz(time.Now().Format("15:04:05") + "  " + mesaj)
 }
 
+// YazSessiz — YALNIZ dosyaya yazar, durum penceresinin fiş günlüğü halkasına
+// YAZMAZ. Kullanıcıyı ilgilendirmeyen ama teşhis için tutulması iyi olan gürültü
+// içindir (ör. long-poll sırasında Cloudflare/Render'ın ara ara döndürdüğü geçici
+// 502/503/504 — otomatik yeniden deneniyor, fiş yine basılıyor). Böylece kafe
+// sahibi fiş günlüğünde "hata" gibi görünen satırlarla korkutulmaz; durum kartı
+// gerçek bağlantı durumunu zaten doğru gösterir (emre 2026-08-18).
+func YazSessiz(bicim string, arg ...any) {
+	mesaj := fmt.Sprintf(bicim, arg...)
+	kilit.Lock()
+	if kayitci == nil {
+		kayitci = log.New(os.Stderr, "", log.LstdFlags)
+	}
+	devret()
+	kayitci.Output(2, mesaj) //nolint:errcheck
+	kilit.Unlock()
+	// halkayaYaz YOK — bilerek: bu satır fiş günlüğü feed'ine girmez.
+}
+
 // Yolu — günlük dosyasının tam yolu (tray "Günlüğü Aç" için).
 func Yolu() string { return yolu }
 

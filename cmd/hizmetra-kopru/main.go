@@ -324,15 +324,21 @@ func eslestirmeDene(kod, makineAdi string) (*api.EslestirCevap, string, error) {
 
 func surumKontrolDongusu() {
 	for {
-		// SEMANTİK kıyas (surum.YeniMi): yalnız sunucu sürümü çalışandan
-		// KESİNLİKLE ileriyse güncelle şeridi gösterilir. Eski düz dizgi
-		// eşitsizliği (bilgi.Surum != Surum) hem downgrade'i "güncelle" sanıyor
-		// hem 0.10.0'ı 0.9.0'dan KÜÇÜK görüyordu ("1" < "9"). Bkz. internal/surum.
-		if bilgi, err := istemci.Surum(); err == nil && bilgi.Surum != "" && surum.YeniMi(bilgi.Surum, Surum) {
-			// Bu işletim sistemi/mimari için DOĞRU paketi seç (Windows installer,
-			// macOS .dmg, Linux .deb). Adres yoksa (eski sunucu yalnız Windows
-			// installer'ı döner) şeridi HİÇ gösterme — aksi halde "Güncelle"
-			// butonu yanlış dosyayı indirir/çalışmaz.
+		bekleme := 12 * time.Hour
+		bilgi, err := istemci.Surum()
+		switch {
+		case err != nil:
+			// Kontrol başarısız (çoğunlukla geçici 502): 12 SAAT değil, KISA süre
+			// sonra yeniden dene — yeni kurulan/başlatılan ajan güncellemeyi 12 saat
+			// geç görmesin (emre 2026-08-18: açılışta kontrol 502 yiyince "Güncelle"
+			// şeridi hiç çıkmıyordu). YazSessiz: fiş günlüğünü kirletme.
+			bekleme = 10 * time.Minute
+			gunluk.YazSessiz("sürüm kontrolü başarısız (%v) — 10 dk sonra yeniden denenecek", err)
+		// SEMANTİK kıyas (surum.YeniMi): yalnız sunucu sürümü çalışandan KESİNLİKLE
+		// ileriyse güncelle şeridi gösterilir (0.10.0 > 0.9.0 doğru; downgrade değil).
+		case bilgi.Surum != "" && surum.YeniMi(bilgi.Surum, Surum):
+			// Bu OS/mimari için DOĞRU paketi seç (Windows installer, macOS .dmg,
+			// Linux .deb). Adres yoksa şeridi HİÇ gösterme (yanlış dosya inmesin).
 			indirmeURL := bilgi.IndirmeURLIcin(runtime.GOOS, runtime.GOARCH)
 			if indirmeURL == "" {
 				gunluk.Yaz("yeni sürüm %s var ama %s/%s için indirme adresi yok — güncelle şeridi gösterilmiyor",
@@ -340,8 +346,6 @@ func surumKontrolDongusu() {
 			} else {
 				gunluk.Yaz("yeni sürüm var: %s (mevcut %s)", bilgi.Surum, Surum)
 				systray.SetTooltip("Hizmetra Yazıcı — güncelleme var: " + bilgi.Surum)
-				// Durum penceresi "Güncelle" şeridini bu alanlardan gösterir:
-				// yeni sürüm + platforma uygun indirme adresi (bkz. ozetTopla, sayfa.html).
 				durum.Ayarla(func(d *kopru.Durum) {
 					d.GuncelSurum = bilgi.Surum
 					d.IndirmeURL = indirmeURL
@@ -351,7 +355,7 @@ func surumKontrolDongusu() {
 		select {
 		case <-dur:
 			return
-		case <-time.After(12 * time.Hour):
+		case <-time.After(bekleme):
 		}
 	}
 }

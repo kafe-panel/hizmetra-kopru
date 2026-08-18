@@ -229,7 +229,11 @@ func (a *Ajan) IsDongusu(dur <-chan struct{}) {
 				// KIS: art arda aynı hatayı en fazla ~5 dakikada bir yaz (sayaçla).
 				geciciSayac++
 				if geciciSonLog.IsZero() || time.Since(geciciSonLog) > 5*time.Minute {
-					gunluk.Yaz("geçici ağ-geçidi hatası (502/503/504) ×%d — sessiz yeniden deneniyor", geciciSayac)
+					// YazSessiz: yalnız dosya loguna (teşhis). Kullanıcının fiş
+					// günlüğünde GÖSTERİLMEZ — geçici, otomatik toparlanan bir blip;
+					// fiş yine basılıyor, durum kartı yeşil kalıyor (emre 2026-08-18:
+					// "hatasız çalışması gerek" — aslında çalışıyor, sadece korkutmasın).
+					gunluk.YazSessiz("geçici ağ-geçidi hatası (502/503/504) ×%d — sessiz yeniden deneniyor", geciciSayac)
 					geciciSonLog = time.Now()
 					geciciSayac = 0
 				}
