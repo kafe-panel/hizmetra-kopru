@@ -9,7 +9,7 @@
       "0409": {
         "identity": {
           "name": "Hizmetra.Kopru",
-          "version": "0.7.2.0"
+          "version": "0.7.3.0"
         },
         "description": "Hizmetra Yazıcı — fiş yazıcı köprüsü",
         "minimum-os": "win7",
@@ -33,20 +33,20 @@
     "#1": {
       "0000": {
         "fixed": {
-          "file_version": "0.7.2.0",
-          "product_version": "0.7.2.0"
+          "file_version": "0.7.3.0",
+          "product_version": "0.7.3.0"
         },
         "info": {
           "0409": {
             "Comments": "Panelden gelen fişleri yerel yazıcılara basar. Giden HTTPS; router ayarı gerekmez.",
             "CompanyName": "Hizmetra",
             "FileDescription": "Hizmetra Yazıcı — fiş yazıcı köprüsü",
-            "FileVersion": "0.7.2.0",
+            "FileVersion": "0.7.3.0",
             "InternalName": "hizmetra-kopru",
             "LegalCopyright": "© Hizmetra",
             "OriginalFilename": "hizmetra-kopru.exe",
             "ProductName": "Hizmetra Yazıcı",
-            "ProductVersion": "0.7.2"
+            "ProductVersion": "0.7.3"
           }
         }
       }
