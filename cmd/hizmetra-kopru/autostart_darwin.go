@@ -81,6 +81,7 @@ func launchAgentPlist(exe string) string {
 	<key>ProgramArguments</key>
 	<array>
 		<string>` + xmlKacis(exe) + `</string>
+		<string>--autostart</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>

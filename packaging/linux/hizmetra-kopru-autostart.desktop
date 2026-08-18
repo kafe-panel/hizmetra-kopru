@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Hizmetra Yazıcı
+GenericName=Fiş Yazıcı Köprüsü
+Comment=Kafe fiş yazıcılarını Hizmetra Panel'e bağlar
+# LOGIN otomatik başlatma: "--autostart" ile → uygulama sessiz tepside kalır,
+# durum penceresi POP-UP OLMAZ (emre 2026-08-18). Menüden ELLE açılışta
+# (/usr/share/applications/hizmetra-kopru.desktop, bayraksız) pencere açılır.
+Exec=/usr/bin/hizmetra-kopru --autostart
+Icon=hizmetra-kopru
+Terminal=false
+Categories=Utility;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

@@ -77,10 +77,11 @@ nfpms:
     # Binary varsayılan bindir'e (/usr/bin) hizmetra-kopru adıyla kurulur.
     bindir: /usr/bin
     contents:
-      # Login'de otomatik başlatma (XDG autostart, sistem geneli).
-      - src: packaging/linux/hizmetra-kopru.desktop
+      # Login'de otomatik başlatma (XDG autostart, sistem geneli) — "--autostart"
+      # bayraklı varyant: uygulama sessiz tepside kalır, pencere pop-up olmaz.
+      - src: packaging/linux/hizmetra-kopru-autostart.desktop
         dst: /etc/xdg/autostart/hizmetra-kopru.desktop
-      # Uygulama menüsü girdisi (elle başlatmak için).
+      # Uygulama menüsü girdisi (ELLE başlatmak için) — bayraksız: pencere açılır.
       - src: packaging/linux/hizmetra-kopru.desktop
         dst: /usr/share/applications/hizmetra-kopru.desktop
       # Menü/tepsi ikonu (hicolor teması, 256px).

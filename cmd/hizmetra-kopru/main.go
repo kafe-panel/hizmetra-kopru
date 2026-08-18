@@ -104,10 +104,17 @@ func main() {
 	go ajan.IsDongusu(dur)
 	go surumKontrolDongusu()
 
-	// Kurulumdan/güncellemeden sonra ilk çalıştırmada durum penceresini bir kez
-	// göster (aksi halde ajan sessizce tepsiye gider, kullanıcı "açılmadı" sanır).
-	// Fresh eşleşmede kurulumTamamlandi zaten açtığı için burada atlanır.
-	go ilkAcilisGoster()
+	// Arayüz görünürlüğü (emre 2026-08-18: "elle açtım ama arayüz gelmedi"):
+	// Kullanıcı uygulamayı ELLE açtıysa (kısayol/Uygulamayı Aç, ya da kurulum/güncelleme
+	// sonrası installer [Run]) durum penceresini göster. Windows açılışında OTOMATİK
+	// başlatmada (installer Run anahtarı "--autostart" verir; macOS LaunchAgent /
+	// Linux autostart .desktop de öyle) sessiz tepside kal — her login'de pencere
+	// pop-up olmasın. Fresh eşleşmede kurulumTamamlandi zaten açtığından bu yol
+	// yalnız zaten-eşleşmiş başlangıçlarda pencereyi açar (çift açılış yok: pencere
+	// paketi zaten-açıksa yenisini açmaz, öne getirir — bkz. internal/pencere).
+	if !bayrakVar("--autostart") {
+		go durumPenceresiniAc()
+	}
 
 	// Ctrl+C / kapanma sinyali (konsoldan çalıştırıldıysa).
 	sinyal := make(chan os.Signal, 1)
@@ -208,35 +215,7 @@ func kurulumTamamlandi(es kurulum.EslesmeSonucu, makineAdi string) kurulumSonuc 
 
 	time.Sleep(2 * time.Second) // sayfadaki "Bağlandı" ekranını okuyacak süre
 	durumPenceresiniAc()
-	ilkAcilisIsaretle() // pencere bu sürümde bir kez gösterildi → main'deki ilkAcilisGoster tekrar açmasın
 	return kurulumDevam
-}
-
-// ilkAcilisGoster — kurulumdan/güncellemeden SONRA ilk çalıştırmada durum
-// penceresini BİR KEZ otomatik açar (emre 2026-08-17: ajan sessizce tepside
-// açılıyordu, kullanıcı "açılmadı" sanıyordu). SÜRÜM BAZLI: yalnız
-// SonGosterilenSurum çalışan Surum'dan farklıysa açar — böylece her login'de
-// değil, yalnız yeni kurulum/güncelleme sonrası ilk açılışta görünür. Fresh
-// eşleşmede kurulumTamamlandi zaten pencereyi açıp işareti koyduğu için atlanır.
-func ilkAcilisGoster() {
-	if yapilandirma.SonGosterilenSurum == Surum {
-		return
-	}
-	gunluk.Yaz("ilk açılış/güncelleme sonrası: durum penceresi bir kez gösteriliyor (sürüm %s)", Surum)
-	durumPenceresiniAc()
-	ilkAcilisIsaretle()
-}
-
-// ilkAcilisIsaretle — SonGosterilenSurum'u çalışan sürüme yazar (pencere bu
-// sürümde bir kez gösterildi). Hem ilkAcilisGoster hem kurulumTamamlandi çağırır.
-func ilkAcilisIsaretle() {
-	if yapilandirma.SonGosterilenSurum == Surum {
-		return
-	}
-	yapilandirma.SonGosterilenSurum = Surum
-	if err := ayar.Kaydet(yapilandirma); err != nil {
-		gunluk.Yaz("son gösterilen sürüm kaydedilemedi: %v", err)
-	}
 }
 
 // yenidenEslestirBir — 401-otomatik yeniden eşleşme yalnız BİR kez çalışsın (iki

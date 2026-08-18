@@ -118,7 +118,12 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 ; "HizmetraYazici" (v0.1-v0.3'ün Go'da yazdığı "HizmetraKopru" değeri İLE
 ; ÇAKIŞMAZ — teknik kimlik mutex adında zaten korunuyor, Run değer ADI
 ; kozmetiktir). uninsdeletevalue: Kaldır'da bu satır da temizlenir.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "HizmetraYazici"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: startupicon; Flags: uninsdeletevalue
+; ValueData'ya "--autostart" eklendi (v0.7.4): Windows açılışında OTOMATİK
+; başlatmada exe bu bayrakla çağrılır → uygulama sessiz tepside kalır (pencere
+; pop-up olmaz). Kullanıcı Başlat menüsü/masaüstü kısayoluna ELLE tıklayınca
+; bayrak YOKTUR → durum penceresi açılır (emre 2026-08-18: "elle açtım, arayüz
+; gelmedi"). Kısayollar ([Icons]) bayrak taşımaz; yalnız bu Run anahtarı taşır.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "HizmetraYazici"; ValueData: """{app}\{#MyAppExeName}"" --autostart"; Tasks: startupicon; Flags: uninsdeletevalue
 
 [Run]
 ; Etkileşimli kurulum bitişi: "Hizmetra Yazıcı'yı çalıştır" onay kutusu (sessizde
