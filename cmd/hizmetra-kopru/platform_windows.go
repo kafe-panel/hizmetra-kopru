@@ -4,6 +4,8 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"runtime"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -74,3 +76,20 @@ func tekKopyaKilidiBekle(sure time.Duration) bool {
 // aynı deseni ("HizmetraYazici" adıyla, tırnaklı exe yolu) artık kendisi
 // yazıyor/kaldırıyor (bkz. installer/hizmetra-yazici.iss, plan Track C4).
 // Autostart tamamen installer'ın sorumluluğu.
+
+// ortamBilgisi — çalışılan Windows sürümü + mimari, günlüğe yazılmak üzere.
+//
+// NEDEN (2026-08-20 canlı olay): "kurdum ama uygulama açılmıyor" şikâyetleri
+// geldiğinde elimizde HİÇBİR veri yoktu — exe `-H windowsgui` ile derlendiği
+// için konsol yok, açılamayan süreç günlük de yazamıyor. Başlangıçta bu satırı
+// yazmak, AÇILABİLEN ama sonra sorun çıkaran kurulumlarda (yanlış mimari değil
+// de ör. WebView2/yazıcı sorunu) destek tarafına anında bağlam verir.
+//
+// RtlGetVersion kullanılır, GetVersionEx DEĞİL: GetVersionEx uygulama
+// manifestine bakar ve manifest beyan etmeyen ikililere 6.2 (Win8) yalanını
+// söyler; RtlGetVersion her zaman GERÇEK sürümü döndürür.
+func ortamBilgisi() string {
+	v := windows.RtlGetVersion()
+	return fmt.Sprintf("Windows %d.%d (derleme %d) · %s",
+		v.MajorVersion, v.MinorVersion, v.BuildNumber, runtime.GOARCH)
+}
