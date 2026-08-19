@@ -73,7 +73,7 @@ func main() {
 		digerKopyayaOdaklanDene()
 		return
 	}
-	gunluk.Yaz("=== Hizmetra Yazıcı %s başladı ===", Surum)
+	gunluk.Yaz("=== Hizmetra Yazıcı %s başladı === (%s)", Surum, ortamBilgisi())
 	otomatikBaslatKur() // macOS: login'de otomatik başlat; diğer OS'lerde no-op
 
 	yapilandirma, err = ayar.Yukle()
@@ -577,7 +577,18 @@ func digerKopyayaOdaklanDene() {
 	adres := fmt.Sprintf("http://127.0.0.1:%d/odaklan?t=%s", a.SonBilinenPort, a.SonBilinenToken)
 	r, err := istemciHTTP.Post(adres, "", nil)
 	if err != nil {
-		gunluk.Yaz("çalışan kopyaya ulaşılamadı, sessizce çıkılıyor: %v", err)
+		// Kilit BAŞKASINDA ama o kopyaya ULAŞILAMIYOR (port değişmiş, kopya
+		// donmuş/zombi). Eskiden burada SESSİZCE çıkılıyordu: kullanıcı kısayola
+		// çift tıklıyor, ekranda hiçbir şey olmuyor → "uygulama açılmıyor"
+		// (2026-08-20 canlı olay). Artık ne olduğunu ve ne yapacağını söylüyoruz.
+		gunluk.Yaz("çalışan kopyaya ulaşılamadı: %v", err)
+		_ = zenity.Warning(
+			"Hizmetra Yazıcı bu bilgisayarda zaten çalışıyor ama yanıt vermiyor.\n\n"+
+				"Saatin yanındaki gizli simgeler (^) arasından Hizmetra Yazıcı'ya sağ tıklayıp "+
+				"Çıkış deyin, sonra programı yeniden açın.\n\n"+
+				"Sorun sürerse bilgisayarı yeniden başlatın.",
+			zenity.Title("Hizmetra Yazıcı"),
+		)
 		return
 	}
 	_ = r.Body.Close()

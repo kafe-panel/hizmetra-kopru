@@ -33,7 +33,7 @@
 ; installer job) — /D zaten tanımlarsa #ifndef bu satırı atlar (redefinition
 ; hatası yok). Yerel ad-hoc derlemede (/D verilmeden) 0.7.0'a düşer.
 #ifndef MyAppVersion
-  #define MyAppVersion "0.7.0"
+  #define MyAppVersion "0.8.0"
 #endif
 #define MyAppPublisher "Hizmetra"
 #define MyAppExeName "hizmetra-kopru.exe"
@@ -102,7 +102,19 @@ Name: "desktopicon"; Description: "Masaüstünde kısayol oluştur"; GroupDescri
 Name: "startupicon"; Description: "Windows açılışında otomatik başlat"; GroupDescription: "Ek görevler:"
 
 [Files]
-Source: "hizmetra-kopru.exe"; DestDir: "{app}"; Flags: ignoreversion
+; MİMARİYE GÖRE TEK İKİLİ. Kurulum paketi hem 64-bit hem 32-bit ikiliyi TAŞIR,
+; kurarken YALNIZ birini {app}\hizmetra-kopru.exe adıyla yazar. Öncesinde yalnız
+; amd64 gömülüydü; 32-bit Windows'ta kurulum sorunsuz bitiyor ama exe HİÇ
+; açılmıyordu ("Bu uygulama bilgisayarınızda çalıştırılamıyor") — kullanıcı
+; bunu "kurdum ama açılmıyor" diye yaşıyordu (2026-08-20 canlı olay).
+;
+; IsX64Compatible (Inno 6.3+) = "x64 ikili bu makinede KOŞAR mı": gerçek x64
+; makinelerde ve x64 öykünmesi olan ARM64 Windows'ta True. Win10 ARM64 yalnız
+; x86 öykünür → orada False döner ve 32-bit ikili kurulur, ki doğrusu odur.
+; Kurulan DOSYA ADI her iki dalda da AYNI (hizmetra-kopru.exe): mutex, Run
+; anahtarı, kısayollar, --kaldir-sunucu ve oto-güncelleme bu ada bağlı.
+Source: "hizmetra-kopru.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: IsX64Compatible
+Source: "hizmetra-kopru_windows_386.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion; Check: not IsX64Compatible
 ; hizmetra.ico'yu {app}'e kopyala → kısayol + Denetim Masası simgeleri BUNDAN
 ; okunur (gömülü exe simgesine güvenmek yerine, ki Windows Search önbelleği
 ; bazen jenerik gösteriyordu — emre "logosu yok"). Tek doğruluk kaynağı.
@@ -162,7 +174,95 @@ Type: filesandordirs; Name: "{userappdata}\HizmetraKopru"
 
 var
   MevcutPage: TInputOptionWizardPage;
+  IndirmePage: TDownloadWizardPage;
   KaldirSecildi: Boolean;
+
+// WebView2 Runtime'ın Evergreen sürüm anahtarı (Microsoft'un belgelediği GUID).
+// Makine geneli kurulumda HKLM 32-bit görünümünde (64-bit Windows'ta
+// WOW6432Node, 32-bit Windows'ta düz SOFTWARE — Inno'nun HKLM32'si ikisini de
+// doğru çözer), kullanıcıya özel kurulumda HKCU altında durur.
+const
+  WV2Anahtar = 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+  WV2AnahtarHKCU = 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+  // Evergreen Bootstrapper — Microsoft'un KALICI kısa bağlantısı (~2 MB indirir,
+  // gerisini kendi çeker). Yönetici hakkı yoksa kullanıcıya özel kurulum yapar,
+  // yani PrivilegesRequired=lowest ile uyumludur.
+  WV2Bootstrapper = 'https://go.microsoft.com/fwlink/p/?LinkId=2124703';
+
+// EnAzWindows10 — Windows sürüm kapısı.
+//
+// NEDEN VAR: uygulama Go ile derleniyor ve Go 1.21'den beri üretilen ikililer
+// Windows 10 / Server 2016 ve üstünü ZORUNLU kılıyor (Windows 7/8/8.1 desteği
+// Go tarafında kaldırıldı). Eski Windows'ta kurulum SORUNSUZ bitiyor, sonra exe
+// hiç açılmıyor — kullanıcıya hiçbir açıklama gitmiyordu (2026-08-20 canlı
+// olay: "kurulumu yaptım ama uygulama açılmıyor"). Artık kurulum en başta
+// durur ve NEDENİNİ söyler.
+//
+// GetWindowsVersionEx GERÇEK sürümü verir (Inno'nun manifesti Windows 10/11
+// uyumluluğunu beyan ettiği için GetVersionEx yalanına düşmez).
+function EnAzWindows10: Boolean;
+var
+  Sur: TWindowsVersion;
+begin
+  GetWindowsVersionEx(Sur);
+  Result := Sur.Major >= 10;
+end;
+
+function WebView2Kurulu: Boolean;
+var
+  Deger: string;
+begin
+  Result :=
+    (RegQueryStringValue(HKLM32, WV2Anahtar, 'pv', Deger) and (Deger <> '') and (Deger <> '0.0.0.0')) or
+    (RegQueryStringValue(HKCU, WV2AnahtarHKCU, 'pv', Deger) and (Deger <> '') and (Deger <> '0.0.0.0'));
+end;
+
+// WebView2Kur — arayüz motoru yoksa Microsoft'un bootstrapper'ını indirip
+// SESSİZCE kurar. Uygulama arayüzünü WebView2 penceresinde gösteriyor; motor
+// yoksa tarayıcı düşüşüne geçiyor (bkz. internal/pencere) — yani program
+// ÇALIŞIR ama kullanıcı beklediği "bilgisayardaki uygulama" penceresini
+// göremez. Windows 11 ve güncel Windows 10'da motor zaten kuruludur; eksik
+// olduğu yerler LTSC/N sürümleri ve uzun süredir güncellenmemiş Windows 10
+// kurulumları — tam da sahada sorun çıkan makineler.
+//
+// HER HATA YUTULUR ve kurulum DEVAM EDER: internet yoksa/indirme düşerse
+// program yine kurulur, yalnız tarayıcı düşüşüyle çalışır. Motor kurulamadı
+// diye kurulumu iptal etmek çok daha kötü olurdu.
+procedure WebView2Kur;
+var
+  SonucKodu: Integer;
+begin
+  if WizardSilent then
+    Exit; // sessiz oto-güncelleme: ilk kurulumda zaten halledildi, indirme yapma
+  if WebView2Kurulu then
+    Exit;
+  IndirmePage.Clear;
+  IndirmePage.Add(WV2Bootstrapper, 'MicrosoftEdgeWebview2Setup.exe', '');
+  IndirmePage.Show;
+  try
+    try
+      IndirmePage.Download;
+      Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/silent /install',
+        '', SW_HIDE, ewWaitUntilTerminated, SonucKodu);
+    except
+      // indirilemedi/kurulamadı → sessizce devam (tarayıcı düşüşü çalışır)
+    end;
+  finally
+    IndirmePage.Hide;
+  end;
+end;
+
+function InitializeSetup: Boolean;
+begin
+  Result := EnAzWindows10;
+  if not Result then
+    MsgBox('Hizmetra Yazıcı, Windows 10 veya daha yeni bir Windows gerektirir.' + #13#10 + #13#10 +
+      'Bu bilgisayardaki Windows sürümü daha eski olduğu için program kurulsa bile açılmaz.' + #13#10 + #13#10 +
+      'Ne yapabilirsiniz:' + #13#10 +
+      '  • Bu bilgisayarı Windows 10/11''e yükseltin, ya da' + #13#10 +
+      '  • Yazıcıyı Windows 10/11 kurulu başka bir bilgisayara bağlayıp programı oraya kurun.' + #13#10 + #13#10 +
+      'Yardım: destek@hizmetra.com', mbCriticalError, MB_OK);
+end;
 
 // AppId + "_is1" = Inno'nun kaldırma kayıt alt-anahtarı. PrivilegesRequired=lowest
 // + localappdata → kurulum HKCU altındadır. (NOT: Pascal yorumunda { } kullanılmaz;
@@ -197,6 +297,12 @@ procedure InitializeWizard;
 var
   Komut, KuruluSurum: string;
 begin
+  { İndirme sayfası HER ZAMAN kurulur (WebView2 adımı kullanır); aşağıdaki
+    erken Exit'lerin ÜSTÜNDE olmalı, yoksa PrepareToInstall nil sayfaya
+    dokunur. }
+  IndirmePage := CreateDownloadPage(SetupMessage(msgWizardPreparing),
+    SetupMessage(msgPreparingDesc), nil);
+
   { Sessiz kurulumda (oto-güncelleme) sayfa gösterilmez; paneli hiç kurma. }
   if WizardSilent then
     Exit;
@@ -251,6 +357,9 @@ begin
   Result := '';
   if (MevcutPage <> nil) and (MevcutPage.SelectedValueIndex <> 2) then
     KapatCalisanUygulama;
+  { Arayüz motoru (WebView2) eksikse burada kurulur — dosyalar kopyalanmadan
+    önce, kullanıcı zaten bekliyorken. Hata olursa kurulum devam eder. }
+  WebView2Kur;
 end;
 
 procedure CancelButtonClick(CurPageID: Integer; var Cancel, Confirm: Boolean);

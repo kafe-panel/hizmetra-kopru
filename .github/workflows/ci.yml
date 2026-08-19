@@ -17,9 +17,31 @@ jobs:
       - run: go test ./... -race
       # Asıl hedef Windows — derlemenin bozulmadığını her PR'da doğrula.
       - run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./...
+      # 32-bit Windows (eski/ucuz kafe kasaları) ARTIK DESTEKLENİYOR — installer
+      # bu ikiliyi de taşıyor. Derlemenin bozulmadığını her PR'da doğrula.
+      - run: CGO_ENABLED=0 GOOS=windows GOARCH=386 go build ./...
       # Linux + macOS de desteklenir (CUPS baskı/keşif). Cross-compile'ın
       # bozulmadığını her PR'da doğrula. macOS'un cmd paketi systray-cgo ister
       # (bkz. release.yml "macos" job) → burada YALNIZ internal/... (CUPS kodu
       # dahil) cgo'suz derlenir; tam macOS ikilisi release'de macos-latest'te üretilir.
       - run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./...
       - run: CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build ./internal/...
+
+  # Installer'ın DERLENDİĞİNİ her PR'da doğrula. Öncesinde .iss YALNIZ tag'li
+  # release'te (installer job) derleniyordu → bir Pascal/sözdizimi hatası ancak
+  # yayın anında, sürüm çıkarken patlıyordu. Burada gerçek exe'lere gerek yok:
+  # iscc dosyaların VARLIĞINI arar, içeriğine bakmaz → sahte dosyalar yeter.
+  installer:
+    name: Inno Setup betiği derleniyor mu
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inno Setup kur (release.yml ile AYNI pin)
+        run: choco install innosetup --version=6.7.1 -y --no-progress
+      - name: Sahte ikilileri koy (iscc yalnız varlık arar)
+        shell: pwsh
+        run: |
+          Set-Content -Path installer\hizmetra-kopru.exe -Value "sahte"
+          Set-Content -Path installer\hizmetra-kopru_windows_386.exe -Value "sahte"
+      - name: iscc ile derle
+        run: iscc "/DMyAppVersion=0.0.0" installer\hizmetra-yazici.iss

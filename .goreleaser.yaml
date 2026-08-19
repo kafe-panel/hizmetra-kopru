@@ -22,7 +22,14 @@ builds:
     env:
       - CGO_ENABLED=0
     goos: [windows]
-    goarch: [amd64]
+    # 386 (32-bit) ZORUNLU, "eski PC" desteği bundan geliyor: sahadaki kafe
+    # kasalarının bir kısmı 32-bit Windows 10 kurulu (ucuz/eski donanım) ve
+    # amd64 exe orada HİÇ AÇILMAZ — Windows "Bu uygulama bilgisayarınızda
+    # çalıştırılamıyor" der; kurulum sorunsuz bittiği için kullanıcı bunu
+    # "kurdum ama açılmıyor" diye yaşıyordu (2026-08-20 canlı olay).
+    # ARM64 Windows'ta da bu ikili x86 öykünmesiyle çalışır (Win10 ARM64
+    # yalnız x86 öykünür, x64'ü öykünmez) → installer 386'yı oraya kurar.
+    goarch: [amd64, "386"]
     # -H windowsgui: konsol penceresi AÇILMAZ (tepside sessiz çalışır)
     # -s -w: sembol tablosunu at → exe küçülür
     ldflags:
@@ -44,13 +51,15 @@ archives:
   # Çıplak ikili yayınlansın: kafe kullanıcısı zip açmakla uğraşmasın
   # (kurulum 3 dakikada bitsin diye — README'deki 1. adım doğrudan bu dosya).
   #
-  # name_template KOŞULLU: Windows'ta "hizmetra-kopru" (+ otomatik .exe uzantısı)
-  # = "hizmetra-kopru.exe" — installer job'ı ve README bu ADI birebir bekler,
-  # DEĞİŞTİRME. Linux'ta iki mimari çakışmasın diye os+arch eklenir
-  # (hizmetra-kopru_linux_amd64 / _linux_arm64).
+  # name_template KOŞULLU: YALNIZ windows/amd64 çıplak "hizmetra-kopru" (+ otomatik
+  # .exe uzantısı) = "hizmetra-kopru.exe" — installer job'ı, README ve backend'in
+  # indirme haritası bu ADI birebir bekler, DEĞİŞTİRME. Diğer her şey os+arch
+  # ekiyle adlandırılır: windows/386 → hizmetra-kopru_windows_386.exe (aksi halde
+  # amd64 ile AYNI ada düşer ve biri diğerini ezerdi), linux → _linux_amd64 /
+  # _linux_arm64 (eski adlar aynen korunur).
   - id: cikti
     formats: [binary]
-    name_template: 'hizmetra-kopru{{ if ne .Os "windows" }}_{{ .Os }}_{{ .Arch }}{{ end }}'
+    name_template: 'hizmetra-kopru{{ if not (and (eq .Os "windows") (eq .Arch "amd64")) }}_{{ .Os }}_{{ .Arch }}{{ end }}'
 
 # Linux .deb — kafe sahibi için KURULABİLİR paket (ham binary'nin yanında kalır).
 # nfpm binary'yi /usr/bin/hizmetra-kopru'ya koyar, autostart .desktop'unu
@@ -105,9 +114,12 @@ release:
   header: |
     ## Kurulum
 
-    **Windows:** Aşağıdan **HizmetraYaziciKurulum.exe** kurulumunu (veya taşınabilir
-    **hizmetra-kopru.exe**'yi) indirin → çift tıklayın (Windows uyarırsa:
-    **Ek bilgi → Yine de çalıştır**) → paneldeki **6 haneli kodu** girin.
+    **Windows:** Aşağıdan **HizmetraYaziciKurulum.exe** kurulumunu indirin → çift
+    tıklayın (Windows uyarırsa: **Ek bilgi → Yine de çalıştır**) → paneldeki
+    **6 haneli kodu** girin. Kurulum 64-bit ve **32-bit** Windows'un ikisini de
+    kapsar; doğru sürümü kendisi seçer. **Windows 10 veya üstü gerekir.**
+    (Taşınabilir ham ikililer: 64-bit **hizmetra-kopru.exe**, 32-bit
+    **hizmetra-kopru_windows_386.exe**.)
 
     **Mac:** **HizmetraYazici.dmg**'yi indirin → uygulamayı **Applications**'a
     sürükleyin → ilk açılışta **sağ tık → Aç** (imzasız) → **6 haneli kodu** girin.

@@ -6,6 +6,20 @@ Panelden gelen sipariş/kasa fişlerini alır ve yazıcınıza basar. Bulut sunu
 yerel ağına **erişmez** — bağlantıyı her zaman bu program başlatır (giden HTTPS), bu yüzden
 modem/router ayarı, port açma veya sabit IP **gerekmez**.
 
+## Sistem gereksinimleri
+
+| | |
+|---|---|
+| **Windows** | **10 veya 11** (Windows 7 / 8 / 8.1 desteklenmez) |
+| **Mimari** | 64-bit **ve** 32-bit — kurulum paketi ikisini de taşır, doğru olanı kendi seçer |
+| **İnternet** | Giden HTTPS yeterli; port açma/sabit IP gerekmez |
+| **Diğer** | Arayüz penceresi için Edge WebView2; yoksa kurulum sırasında otomatik kurulur |
+
+> **Windows 7/8/8.1 neden desteklenmiyor?** Program Go ile derleniyor; Go 1.21'den bu yana
+> üretilen çalıştırılabilir dosyalar Windows 10 / Server 2016 ve üstünü zorunlu kılıyor.
+> Bu sürümlerde kurulum baştan durur ve nedenini söyler (sessizce açılmayan bir program
+> kurmaktansa açık bir uyarı vermek daha doğru).
+
 ## Kurulum (3 dakika)
 
 1. **[Programı indirin](https://github.com/kafe-panel/hizmetra-kopru/releases/latest)** → `hizmetra-kopru.exe`
@@ -49,6 +63,21 @@ yazıyorsa internet, "⚠" yazıyorsa mesajdaki hata (kağıt bitti, yazıcı ka
 **Bilgisayarı değiştirdim.** Eski bilgisayarı panelden **Kaldır** deyin (bağlantısı anında kesilir),
 yenisinde yeni kurulum kodu ile kurun.
 
+**Kurulum bitti ama program açılmıyor.** Sırayla kontrol edin:
+
+1. **Windows sürümü.** `Windows tuşu + R` → `winver` → Enter. Sürüm **10** veya **11**
+   değilse program çalışmaz (bkz. Sistem gereksinimleri). Kurulum paketi bunu artık
+   baştan söyler; daha eski bir paketle kurduysanız sessizce açılmamış olabilir.
+2. **Zaten çalışıyor olabilir.** Saatin yanındaki **gizli simgeler (^)** okunu açın;
+   Hizmetra Yazıcı simgesi oradaysa program açık demektir — simgeye tıklayın.
+3. **Antivirüs silmiş olabilir.** Program henüz dijital imzalı olmadığı için bazı
+   antivirüsler kurulumdan sonra dosyayı karantinaya alıyor.
+   `%LOCALAPPDATA%\HizmetraYazici\hizmetra-kopru.exe` yoksa sebep budur: antivirüste
+   bu klasörü izin listesine ekleyip kurulumu tekrarlayın.
+4. **Günlük dosyası.** `%APPDATA%\HizmetraKopru\` klasöründe günlük varsa program en az
+   bir kez **açılmış** demektir — dosyanın son satırlarını destek ile paylaşın. Günlük hiç
+   yoksa program hiç başlayamamış demektir (1-3. maddeler).
+
 ## Gizlilik
 
 - Program yalnız **giden** bağlantı kurar; dışarıdan bilgisayarınıza erişilmez.
@@ -63,6 +92,8 @@ yenisinde yeni kurulum kodu ile kurun.
 ```bash
 go test ./...
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X main.Surum=$(git describe --tags)" -o dist/hizmetra-kopru.exe ./cmd/hizmetra-kopru
+# 32-bit Windows icin:
+CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -ldflags "-H windowsgui -s -w -X main.Surum=$(git describe --tags)" -o dist/hizmetra-kopru_windows_386.exe ./cmd/hizmetra-kopru
 ```
 
 Farklı sunucuya bağlanmak için: `HIZMETRA_API=http://localhost:5002` ortam değişkeni.

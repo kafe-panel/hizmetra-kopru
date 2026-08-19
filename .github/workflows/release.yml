@@ -25,7 +25,7 @@ jobs:
           VER="${GITHUB_REF_NAME#v}"
           go run github.com/tc-hib/go-winres@latest make \
             --in cmd/hizmetra-kopru/winres/winres.json \
-            --arch amd64 \
+            --arch amd64,386 \
             --out cmd/hizmetra-kopru/rsrc \
             --product-version "$VER" \
             --file-version "$VER"
@@ -111,10 +111,16 @@ jobs:
       - name: Inno Setup kur (chocolatey ön-kurulu, sürüm pinli)
         run: choco install innosetup --version=6.7.1 -y --no-progress
 
-      - name: goreleaser'ın yayınladığı hizmetra-kopru.exe'yi indir
+      # HER İKİ mimari de indirilir: installer ikisini de taşır, kurarken makineye
+      # uygun olanı yazar (bkz. hizmetra-yazici.iss [Files] Check: IsX64Compatible).
+      # --pattern bir GLOB'dur ve "hizmetra-kopru.exe" 386 dosyasını KAPSAMAZ →
+      # ayrı satır ŞART; eksik kalırsa iscc "dosya bulunamadı" ile patlar.
+      - name: goreleaser'ın yayınladığı Windows ikililerini indir (amd64 + 386)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release download "${{ github.ref_name }}" --repo "${{ github.repository }}" --pattern "hizmetra-kopru.exe" --dir installer --clobber
+        run: |
+          gh release download "${{ github.ref_name }}" --repo "${{ github.repository }}" --pattern "hizmetra-kopru.exe" --dir installer --clobber
+          gh release download "${{ github.ref_name }}" --repo "${{ github.repository }}" --pattern "hizmetra-kopru_windows_386.exe" --dir installer --clobber
 
       - name: Installer derle (iscc — sürüm etiketten /D ile geçer)
         run: |
