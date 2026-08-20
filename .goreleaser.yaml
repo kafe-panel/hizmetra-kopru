@@ -114,12 +114,17 @@ release:
   header: |
     ## Kurulum
 
-    **Windows:** Aşağıdan **HizmetraYaziciKurulum.exe** kurulumunu indirin → çift
-    tıklayın (Windows uyarırsa: **Ek bilgi → Yine de çalıştır**) → paneldeki
+    **Windows 10 / 11:** Aşağıdan **HizmetraYaziciKurulum.exe** kurulumunu indirin →
+    çift tıklayın (Windows uyarırsa: **Ek bilgi → Yine de çalıştır**) → paneldeki
     **6 haneli kodu** girin. Kurulum 64-bit ve **32-bit** Windows'un ikisini de
-    kapsar; doğru sürümü kendisi seçer. **Windows 10 veya üstü gerekir.**
-    (Taşınabilir ham ikililer: 64-bit **hizmetra-kopru.exe**, 32-bit
-    **hizmetra-kopru_windows_386.exe**.)
+    kapsar; doğru sürümü kendisi seçer. (Taşınabilir ham ikililer: 64-bit
+    **hizmetra-kopru.exe**, 32-bit **hizmetra-kopru_windows_386.exe**.)
+
+    **Windows 7 / 8 / 8.1 (eski):** **HizmetraYaziciKurulum-EskiWindows.exe**
+    kurulumunu indirin. Bu sürüm eski Windows'la uyumlu olacak şekilde derlenmiştir
+    (arayüz tarayıcıda açılır, tepsi ikonu yoktur); fiş basma aynıdır. 64/32-bit
+    otomatik seçilir. (Ham ikililer: **hizmetra-kopru-eski.exe** /
+    **hizmetra-kopru-eski_windows_386.exe**.)
 
     **Mac:** **HizmetraYazici.dmg**'yi indirin → uygulamayı **Applications**'a
     sürükleyin → ilk açılışta **sağ tık → Aç** (imzasız) → **6 haneli kodu** girin.
