@@ -157,3 +157,62 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.ref_name }}" "installer\Output\HizmetraYaziciKurulum.exe" --repo "${{ github.repository }}" --clobber
+
+  # ─── ESKİ WINDOWS (Win7 SP1 / 8 / 8.1) ikilileri — Go 1.20 ile derlenir ───
+  # AYRI job + Go 1.20 ZORUNLU: modern goreleaser job'ı Go 1.22 kullanır ve ürettiği
+  # ikili Windows 10+ ister (Go 1.21'den beri Win7/8 desteği kalktı). Bu job Go 1.20
+  # ile cmd/hizmetra-kopru-eski'yi (systray/WebView2 YOK, tarayıcı-UI) derler → Win7
+  # SP1'den itibaren çalışır. CGO gerekmez (yalnız x/sys + godoes/printers), ubuntu'da
+  # cross-compile edilir. Modern build'i BOZMAZ: go.mod aynı (x/sys v0.17'ye pinli).
+  legacy-windows:
+    name: Eski Windows ikilileri (Go 1.20 — Win7/8/8.1)
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.20"
+      - name: Eski-Windows ikililerini derle (amd64 + 386, Go 1.20)
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X main.Surum=$VER" -o hizmetra-kopru-eski.exe ./cmd/hizmetra-kopru-eski
+          GOOS=windows GOARCH=386   go build -ldflags "-H windowsgui -s -w -X main.Surum=$VER" -o hizmetra-kopru-eski_windows_386.exe ./cmd/hizmetra-kopru-eski
+      - name: Eski-Windows ikililerini release'e yükle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            hizmetra-kopru-eski.exe \
+            hizmetra-kopru-eski_windows_386.exe \
+            --repo "${{ github.repository }}" --clobber
+
+  # ─── ESKİ WINDOWS installer (Inno Setup, Win10 kapısı YOK) ───
+  # AYRI job + windows-latest ZORUNLU: iscc.exe yalnız Windows. legacy-windows'un
+  # yüklediği eski ikilileri indirip hizmetra-yazici-eski.iss ile paketler
+  # (MinVersion=6.1sp1, WebView2 adımı yok), HizmetraYaziciKurulum-EskiWindows.exe
+  # olarak AYNI release'e yükler.
+  legacy-installer:
+    name: Eski Windows installer (Inno Setup)
+    needs: legacy-windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inno Setup kur (sürüm pinli — modern installer job ile aynı)
+        run: choco install innosetup --version=6.7.1 -y --no-progress
+      - name: Eski-Windows ikililerini indir (amd64 + 386)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "${{ github.ref_name }}" --repo "${{ github.repository }}" --pattern "hizmetra-kopru-eski.exe" --dir installer --clobber
+          gh release download "${{ github.ref_name }}" --repo "${{ github.repository }}" --pattern "hizmetra-kopru-eski_windows_386.exe" --dir installer --clobber
+      - name: Eski-Windows installer derle (iscc)
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v', ''
+          iscc "/DMyAppVersion=$ver" installer\hizmetra-yazici-eski.iss
+      - name: Eski-Windows installer'ı release'e yükle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" "installer\Output\HizmetraYaziciKurulum-EskiWindows.exe" --repo "${{ github.repository }}" --clobber
