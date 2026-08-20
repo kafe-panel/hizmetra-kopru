@@ -2,11 +2,14 @@
 ;
 ; NEDEN AYRI (2026-08-20): Ana installer (hizmetra-yazici.iss) Go 1.21+ ile
 ; derlenen ikiliyi taşır ve InitializeSetup'ta Windows 10 GEREKTİRİR (eski
-; Windows'ta exe hiç açılmaz). Bu installer ise Go 1.20 ile derlenmiş
-; "eski Windows" ikilisini (cmd/hizmetra-kopru-eski) taşır — Win7 SP1'den
-; itibaren ÇALIŞIR. Bu yüzden:
+; Windows'ta exe hiç açılmaz). Bu installer ise AYNI uygulamanın (cmd/hizmetra-
+; kopru) Go **1.20** ile derlenmiş ikilisini taşır — Win7 SP1'den itibaren
+; ÇALIŞIR ve Win10/11'de MODERN sürümle AYNI native pencereyi (WebView2 + tepsi
+; ikonu) açar. WebView2 kurulu değilse (yalnız Win7/8) tarayıcı düşüşüne geçer.
+; Bu yüzden:
 ;   - Windows 10 kapısı YOK (InitializeSetup sürüm kontrolü kaldırıldı),
-;   - WebView2 kurulum adımı YOK (eski ajan arayüzü tarayıcıda gösterir),
+;   - WebView2 kurulum adımı YOK (Win7/8'de WebView2 desteklenmez; tarayıcı düşüşü
+;     zaten var — Win10/11'de kullanıcı isterse WebView2'yi ayrıca kurabilir),
 ;   - MinVersion=6.1sp1 (Win7 SP1) — daha eskisinde Inno zaten reddeder.
 ;
 ; TEKNİK KİMLİK ana installer'la AYNI: kurulan dosya hizmetra-kopru.exe,

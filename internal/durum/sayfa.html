@@ -121,6 +121,20 @@
   .yazici-kutu { flex: 1 1 44%; }
   .fis-kolon  { flex: 1 1 56%; }
 
+  /* Dar pencere: iki kolon ÜST ÜSTE geçsin — yatay kırpılma/taşma olmasın.
+     emre 2026-08-20: "her ölçekte her şey görünsün, ölçüler kayıp durmasın;
+     kullanıcı küçültüp büyütsün". Pencere yeniden boyutlandırılabilir (Win32
+     varsayılanı); bu kural içeriğin HER genişlikte düzgün akmasını garantiler. */
+  @media (max-width: 700px) {
+    .kolonlar { flex-direction: column; }
+    .yazici-kutu, .fis-kolon { flex: 1 1 auto; }
+    .kutu-govde, .fis-govde { max-height: 240px; }
+  }
+  /* Çok kısa pencerede bile fiş/yazıcı kutuları makul yükseklikte kalsın. */
+  @media (max-height: 560px) {
+    .kutu-govde, .fis-govde { max-height: 150px; }
+  }
+
   .kutu {
     background: var(--yuzey);
     border: 1px solid var(--cizgi);
