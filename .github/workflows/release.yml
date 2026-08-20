@@ -160,9 +160,13 @@ jobs:
 
   # ─── ESKİ WINDOWS (Win7 SP1 / 8 / 8.1) ikilileri — Go 1.20 ile derlenir ───
   # AYRI job + Go 1.20 ZORUNLU: modern goreleaser job'ı Go 1.22 kullanır ve ürettiği
-  # ikili Windows 10+ ister (Go 1.21'den beri Win7/8 desteği kalktı). Bu job Go 1.20
-  # ile cmd/hizmetra-kopru-eski'yi (systray/WebView2 YOK, tarayıcı-UI) derler → Win7
-  # SP1'den itibaren çalışır. CGO gerekmez (yalnız x/sys + godoes/printers), ubuntu'da
+  # ikili Windows 10+ ister (Go 1.21'den beri Win7/8 desteği kalktı). Bu job AYNI
+  # `cmd/hizmetra-kopru`yu (TAM uygulama: systray + WebView2 native pencere + oto-
+  # güncelleme; WebView2 yoksa tarayıcı düşüşü) Go 1.20 ile derler → Win7 SP1'den
+  # itibaren çalışır ve Win10/11'de MODERN sürümle AYNI native pencereyi açar (emre
+  # 2026-08-20: "eski sürüm tarayıcıda açılıyor, uygulama bilgisayarda olmalı").
+  # `-X main.Kanal=eski`: oto-güncelleme MODERN yerine ESKİ installer'ı indirir
+  # (windows_eski anahtarı). CGO gerekmez (Windows'ta systray saf Win32), ubuntu'da
   # cross-compile edilir. Modern build'i BOZMAZ: go.mod aynı (x/sys v0.17'ye pinli).
   legacy-windows:
     name: Eski Windows ikilileri (Go 1.20 — Win7/8/8.1)
@@ -170,16 +174,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Exe ikonu + VERSIONINFO (.syso) YENİ Go ile üretilir (go-winres@latest eski
+      # Go'da derlenmeyebilir); Go 1.20 yalnız hazır .syso'yu linkler. Modern
+      # goreleaser job'ıyla aynı adım — pencere/görev-çubuğu ikonu için ŞART
+      # (IconId=1, bkz. internal/pencere; olmadan jenerik ikon).
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Exe ikonu + surum bilgisi (go-winres)
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          go run github.com/tc-hib/go-winres@latest make \
+            --in cmd/hizmetra-kopru/winres/winres.json \
+            --arch amd64,386 \
+            --out cmd/hizmetra-kopru/rsrc \
+            --product-version "$VER" \
+            --file-version "$VER"
       - uses: actions/setup-go@v5
         with:
           go-version: "1.20"
-      - name: Eski-Windows ikililerini derle (amd64 + 386, Go 1.20)
+      - name: Eski-Windows ikililerini derle (modern cmd, Go 1.20, Kanal=eski)
         env:
           CGO_ENABLED: "0"
         run: |
           VER="${GITHUB_REF_NAME#v}"
-          GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X main.Surum=$VER" -o hizmetra-kopru-eski.exe ./cmd/hizmetra-kopru-eski
-          GOOS=windows GOARCH=386   go build -ldflags "-H windowsgui -s -w -X main.Surum=$VER" -o hizmetra-kopru-eski_windows_386.exe ./cmd/hizmetra-kopru-eski
+          GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X main.Surum=$VER -X main.Kanal=eski" -o hizmetra-kopru-eski.exe ./cmd/hizmetra-kopru
+          GOOS=windows GOARCH=386   go build -ldflags "-H windowsgui -s -w -X main.Surum=$VER -X main.Kanal=eski" -o hizmetra-kopru-eski_windows_386.exe ./cmd/hizmetra-kopru
       - name: Eski-Windows ikililerini release'e yükle
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

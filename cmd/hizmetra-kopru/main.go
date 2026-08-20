@@ -37,6 +37,13 @@ import (
 // Surum — derleme sırasında -ldflags "-X main.Surum=..." ile doldurulur.
 var Surum = "0.1.0"
 
+// Kanal — derleme kanalı. Boş/"normal" = standart (Win10+, Go 1.22 build).
+// "eski" = ESKİ WINDOWS derlemesi: AYNI kod, Go 1.20 ile derlenir (Win7 SP1+
+// çalışır) ve oto-güncelleme MODERN installer yerine ESKİ installer'ı
+// (windows_eski anahtarı) indirir — modern installer eski Windows'ta kurulmaz.
+// release.yml legacy-windows job'ı `-X main.Kanal=eski` geçer.
+var Kanal = ""
+
 var (
 	yapilandirma *ayar.Ayar
 	istemci      *api.Client
@@ -318,7 +325,14 @@ func surumKontrolDongusu() {
 		case bilgi.Surum != "" && surum.YeniMi(bilgi.Surum, Surum):
 			// Bu OS/mimari için DOĞRU paketi seç (Windows installer, macOS .dmg,
 			// Linux .deb). Adres yoksa şeridi HİÇ gösterme (yanlış dosya inmesin).
-			indirmeURL := bilgi.IndirmeURLIcin(runtime.GOOS, runtime.GOARCH)
+			// ESKİ WINDOWS kanalı (Go 1.20 build): "windows_eski" anahtarını iste — modern
+			// installer (Go 1.21+) eski Windows'ta kurulmaz; ajan kendini ESKİ installer'la
+			// güncellemeli (yoksa IndirmeURLIcin "windows"e düşer).
+			osAnahtar := runtime.GOOS
+			if Kanal == "eski" && runtime.GOOS == "windows" {
+				osAnahtar = "windows_eski"
+			}
+			indirmeURL := bilgi.IndirmeURLIcin(osAnahtar, runtime.GOARCH)
 			if indirmeURL == "" {
 				gunluk.Yaz("yeni sürüm %s var ama %s/%s için indirme adresi yok — güncelle şeridi gösterilmiyor",
 					bilgi.Surum, runtime.GOOS, runtime.GOARCH)
