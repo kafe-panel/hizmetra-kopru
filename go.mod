@@ -1,6 +1,6 @@
 module github.com/kafe-panel/hizmetra-kopru
 
-go 1.23.1
+go 1.20
 
 require (
 	fyne.io/systray v1.12.2
