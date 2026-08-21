@@ -3,7 +3,9 @@
 package main
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -65,3 +67,23 @@ func panoOku() string {
 // iş parçacığında, çalışan bir run loop ile kurulabilir (bkz. main.go akış notu
 // ve internal/pencere/pencere_darwin.m).
 const uiTrayIcinde = true
+
+// dmgIcindenCalisiyor — uygulama .dmg disk imajının İÇİNDEN mi başlatıldı?
+//
+// NEDEN (emre 2026-08-21, ekran görüntüsü): Kullanıcı .dmg'yi açıp uygulamayı
+// Applications'a SÜRÜKLEMEDEN doğrudan imajın içinden çalıştırıyor. Bu iki
+// sorun doğurur: (1) disk imajı SALT OKUNURDUR ve çıkarıldığında uygulama
+// kaybolur; (2) LaunchAgent otomatik başlatma kaydı /Volumes/... altındaki
+// geçici yolu işaret eder → bilgisayar yeniden başlayınca ajan HİÇ açılmaz ve
+// fişler sessizce basılmaz. Bu durumu erken yakalayıp kullanıcıya ne yapacağını
+// söylemek, sonradan "kurdum ama fiş basmıyor" desteğinden çok daha ucuzdur.
+func dmgIcindenCalisiyor() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	if cozulmus, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = cozulmus
+	}
+	return strings.HasPrefix(exe, "/Volumes/")
+}

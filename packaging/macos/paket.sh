@@ -30,6 +30,12 @@ AMD64_BIN="${2:-hizmetra-kopru_darwin_amd64}"
 ARM64_BIN="${3:-hizmetra-kopru_darwin_arm64}"
 MIN_MACOS="${MIN_MACOS:-10.15}"
 DMG_ADI="${DMG_ADI:-HizmetraYazici.dmg}"
+# IMZA_KIMLIGI boşsa AD-HOC imza kullanılır (Gatekeeper uyarısı KALKMAZ, yalnız
+# "uygulama zarar görmüş" hatası engellenir). Apple Developer Program üyeliği
+# alınıp CI'ya sertifika secret'ı eklenince buraya "Developer ID Application:
+# ... (TEAMID)" gelir → gerçek imza + hardened runtime + güvenli zaman damgası,
+# ki notarization ancak böyle kabul edilir.
+IMZA_KIMLIGI="${IMZA_KIMLIGI:-}"
 
 # Repo kökü (bu script packaging/macos/ altında).
 KOK="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -65,8 +71,16 @@ chmod +x "$CONTENTS/MacOS/hizmetra-kopru"
 # `--deep` KULLANILMAZ (Apple DTS önermiyor): önce çalıştırılabilir, sonra bundle.
 # Bu, Gatekeeper uyarısını KALDIRMAZ (onun için Developer ID + notarization
 # gerekir) ama "damaged" hatasını engeller ve "Yine de Aç" yolunu AÇAR.
-echo "==> ad-hoc kod imzası"
-codesign --force --sign - "$CONTENTS/MacOS/hizmetra-kopru"
+if [ -n "$IMZA_KIMLIGI" ]; then
+  # GERÇEK imza: notarization için hardened runtime (--options runtime) ve
+  # güvenli zaman damgası (--timestamp) ZORUNLUDUR; ikisi olmadan Apple
+  # notarization'ı reddeder.
+  echo "==> Developer ID imzası (hardened runtime)"
+  codesign --force --options runtime --timestamp     --sign "$IMZA_KIMLIGI" "$CONTENTS/MacOS/hizmetra-kopru"
+else
+  echo "==> ad-hoc kod imzası (imzasız dağıtım)"
+  codesign --force --sign - "$CONTENTS/MacOS/hizmetra-kopru"
+fi
 
 # 2) Info.plist — sürüm şablondan doldurulur.
 echo "==> Info.plist ($VER)"
@@ -96,8 +110,13 @@ printf 'APPL????' > "$CONTENTS/PkgInfo"
 # 4b) BUNDLE AD-HOC İMZASI — tüm içerik (Info.plist, icon.icns, PkgInfo)
 # yerleştikten SONRA. Bundle mührü, .app'in aktarım sırasında bozulmadığını
 # doğrular; imzasız bundle Apple Silicon'da "damaged" hatasına yol açar.
-echo "==> bundle ad-hoc imzası"
-codesign --force --sign - "$CIKTI/$BUNDLE"
+if [ -n "$IMZA_KIMLIGI" ]; then
+  echo "==> bundle Developer ID imzası"
+  codesign --force --options runtime --timestamp     --sign "$IMZA_KIMLIGI" "$CIKTI/$BUNDLE"
+else
+  echo "==> bundle ad-hoc imzası"
+  codesign --force --sign - "$CIKTI/$BUNDLE"
+fi
 
 # 5) .dmg — "Applications'a sürükle" arayüzü: .app + Applications symlink + not.
 echo "==> .dmg"

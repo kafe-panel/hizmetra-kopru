@@ -60,3 +60,6 @@ func panoOku() string {
 // çalıştırır (bkz. internal/pencere/pencere_windows.go), tepsi döngüsüne bağlı
 // değildir; akış sırası değişmez.
 const uiTrayIcinde = false
+
+// dmgIcindenCalisiyor — macOS'a özgü (disk imajı) kontrol; Windows'ta anlamsız.
+func dmgIcindenCalisiyor() bool { return false }
