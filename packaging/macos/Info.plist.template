@@ -26,8 +26,15 @@
 	<string>????</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<!-- __MINOS__ yer tutucusunu paket.sh doldurur (MIN_MACOS ortam değişkeni):
+	     MODERN kanal 10.15, ESKİ (Go 1.20) kanal 10.13.
+	     ⚠️ 2026-08-21: Burada SABİT "10.13" yazıyordu ama ikili Go 1.22 ile
+	     derleniyordu ve Go 1.21'den beri taban macOS 10.15'tir → plist YALAN bir
+	     beyan yapıyordu. Launch Services uygulamayı başlatmaya kalkıyor, dyld
+	     reddediyor; LSUIElement=true olduğu için kullanıcı sessiz bir başarısızlık
+	     yaşıyordu. Bu değer ARTIK derlemedeki gerçek tabanla eşleşmek ZORUNDA. -->
 	<key>LSMinimumSystemVersion</key>
-	<string>10.13</string>
+	<string>__MINOS__</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHighResolutionCapable</key>

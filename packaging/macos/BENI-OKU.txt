@@ -1,16 +1,42 @@
-HIZMETRA YAZICI — Mac Kurulumu (3 adım)
-========================================
+HIZMETRA YAZICI — Mac Kurulumu
+================================
 
 1) "Hizmetra Yazıcı" simgesini, yanındaki "Applications" (Uygulamalar)
    klasörünün üzerine SÜRÜKLEYİP bırakın.
 
-2) Uygulamalar klasörünü açın, "Hizmetra Yazıcı"ya SAĞ TIKLAYIN ve "Aç" deyin.
-   Çıkan uyarı penceresinde tekrar "Aç" düğmesine basın.
+2) Uygulamalar klasöründen "Hizmetra Yazıcı"yı açın.
 
-   NEDEN? Uygulama henüz Apple tarafından imzalanmadığı için, ÇİFT TIKLAMAYLA
-   açmayı denerseniz macOS "geliştirici doğrulanamadı" diyip engeller. Yalnızca
-   İLK açılışta "sağ tık -> Aç" yapmanız gerekir; sonrasında normal çift tıkla
-   açılır. (Bu güvenli — imzalama sertifikası başvurusu sürüyor.)
+   İlk açılışta macOS bir güvenlik uyarısı gösterir. NEDENİ: uygulama henüz
+   Apple tarafından imzalanmadı (imzalama başvurusu sürüyor). Uyarıyı geçmek
+   için macOS sürümünüze göre AŞAĞIDAKİ adımları izleyin.
+
+   ⚠️ "Çöp Kutusuna Taşı" / "Move to Trash" düğmesine BASMAYIN — uygulamayı
+   siler. Bunun yerine "Tamam" / "Done" deyin ve aşağıdaki adımlara geçin.
+
+   ── macOS 15 (Sequoia) ve daha yenisi ──────────────────────────────────
+   Bu sürümlerde Apple, "sağ tık → Aç" yöntemini KALDIRDI. Şu yolu izleyin:
+
+     a) Uyarı penceresinde "Tamam" (Done) deyin.
+     b) Sol üstteki  menüsü → "Sistem Ayarları" (System Settings).
+     c) Soldan "Gizlilik ve Güvenlik" (Privacy & Security) → aşağı kaydırın.
+     d) "Güvenlik" bölümünde şu satırı görürsünüz:
+        «"Hizmetra Yazıcı" Mac'inizi korumak için engellendi»
+        Yanındaki "Yine de Aç" (Open Anyway) düğmesine basın.
+     e) Mac parolanızı girin (ya da Touch ID).
+     f) Uygulama yeniden açılır; bir onay penceresi daha gelirse yine
+        "Yine de Aç" deyin.
+
+     NOT: "Yine de Aç" düğmesi, uygulamayı açmayı denedikten sonra yaklaşık
+     BİR SAAT görünür. Görmüyorsanız uygulamayı bir kez daha açmayı deneyin,
+     sonra Sistem Ayarları'na dönün.
+
+   ── macOS 14 (Sonoma) ve daha eskisi ───────────────────────────────────
+     a) Uygulamalar klasöründe "Hizmetra Yazıcı"ya SAĞ TIKLAYIN.
+     b) "Aç" (Open) deyin.
+     c) Çıkan uyarı penceresinde tekrar "Aç" düğmesine basın.
+
+   Bu adımlar YALNIZCA İLK AÇILIŞTA gerekir; sonrasında normal çift tıklamayla
+   açılır. Güncellemeler de sessizce kurulur, bu adımları tekrar istemez.
 
 3) Panelde görünen 6 haneli kurulum kodunu girin. Bağlantı kurulunca fişler
    otomatik yazdırılmaya başlar.
@@ -19,5 +45,12 @@ Not: Uygulama ekranın SAĞ ÜST köşesindeki menü çubuğunda küçük bir si
 çalışır (Dock'ta görünmez). Ayarlara/duruma bu simgeye tıklayarak ulaşırsınız.
 Bilgisayarı her açtığınızda kendiliğinden başlar.
 
-Sorun olursa: Uygulamalar > Hizmetra Yazıcı'yı silip bu penceredeki adımları
-tekrarlayın, ya da destek@hizmetra.com ile iletişime geçin.
+Hangi macOS sürümündeyim?  menüsü → "Bu Mac Hakkında" (About This Mac).
+
+Eski Mac'ler: macOS 10.13 (High Sierra) veya 10.14 (Mojave) kullanıyorsanız
+panelden "Eski Mac sürümü" kurulumunu indirin — normal sürüm o Mac'lerde
+açılmaz.
+
+Sorun olursa: Uygulamalar > Hizmetra Yazıcı'yı silip bu adımları tekrarlayın,
+ya da destek@hizmetra.com ile iletişime geçin. Sizden Terminal'e komut
+yapıştırmanızı İSTEMEYİZ — böyle bir istek gelirse bize bildirin.

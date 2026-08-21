@@ -256,11 +256,20 @@ function InitializeSetup: Boolean;
 begin
   Result := EnAzWindows10;
   if not Result then
-    MsgBox('Hizmetra Yazıcı, Windows 10 veya daha yeni bir Windows gerektirir.' + #13#10 + #13#10 +
-      'Bu bilgisayardaki Windows sürümü daha eski olduğu için program kurulsa bile açılmaz.' + #13#10 + #13#10 +
-      'Ne yapabilirsiniz:' + #13#10 +
-      '  • Bu bilgisayarı Windows 10/11''e yükseltin, ya da' + #13#10 +
-      '  • Yazıcıyı Windows 10/11 kurulu başka bir bilgisayara bağlayıp programı oraya kurun.' + #13#10 + #13#10 +
+    // 2026-08-21: Artık ESKİ WINDOWS KURULUMU VAR — mesaj onu söylemek ZORUNDA.
+    // Önceden yalnız "Windows'unu yükselt / başka bilgisayar kullan" diyordu;
+    // panelde iki kart yan yana dursa da GitHub release'inden ya da eski bir
+    // bağlantıdan modern kurulumu indiren Win7/8 kullanıcısı burada çıkmaza
+    // düşüyordu. Doğru çözüm tek tık uzakta: eski kurulumun indirme adresi.
+    MsgBox('Bu bilgisayarda Windows 10''dan eski bir sürüm var.' + #13#10 + #13#10 +
+      'İNDİRDİĞİNİZ KURULUM bu Windows''ta ÇALIŞMAZ — ama sizin için AYRI bir' + #13#10 +
+      'sürümümüz var:' + #13#10 + #13#10 +
+      '  HizmetraYaziciKurulum-EskiWindows.exe' + #13#10 + #13#10 +
+      'Windows 7 SP1, 8 ve 8.1 ile uyumludur. İndirmek için:' + #13#10 +
+      '  • Hizmetra panelinde Yazıcılar > Bilgisayar Programı bölümünde' + #13#10 +
+      '    "Windows 7 / 8 / 8.1" kartına tıklayın, ya da' + #13#10 +
+      '  • Şu adresi tarayıcınıza yazın:' + #13#10 +
+      '    https://github.com/kafe-panel/hizmetra-kopru/releases/latest' + #13#10 + #13#10 +
       'Yardım: destek@hizmetra.com', mbCriticalError, MB_OK);
 end;
 

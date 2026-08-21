@@ -316,6 +316,26 @@
     </div>
   </div>
 
+<!-- ESKİ TARAYICI (IE11) MUHAFIZI — AYRI blok olmak ZORUNDA (2026-08-21).
+     Aşağıdaki ana betik async/await + fetch kullanır; IE11 bunu PARSE edemez ve
+     blok TAMAMEN çalışmaz → kullanıcı boş/yarım bir sayfa görürdü. Win7/8'de
+     WebView2 olmadığı için durum ekranı sistem tarayıcısında (stok kurulumda
+     IE11) açılır, yani bu gerçek bir senaryo. Bu ES5 blok ayrı <script> olduğu
+     için ana bloğun parse hatasından ETKİLENMEZ ve kullanıcıya durumu söyler.
+     ÖNEMLİ: fiş basımı bu sayfadan BAĞIMSIZ çalışır — ajan arka planda basar. -->
+<script>
+if (!window.fetch || !window.Promise) {
+  document.body.innerHTML =
+    '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:620px;margin:56px auto;padding:26px 28px;' +
+    'border:1px solid #e5e7eb;border-radius:14px;background:#ffffff;color:#0f172a">' +
+    '<h1 style="font-size:20px;margin:0 0 10px">Hizmetra Yazıcı çalışıyor</h1>' +
+    '<p style="color:#334155;line-height:1.65;margin:0 0 12px">' +
+    'Fişleriniz normal şekilde basılmaya devam ediyor — bu ekran yalnızca durum bilgisi gösterir.</p>' +
+    '<p style="color:#64748b;line-height:1.65;margin:0">' +
+    'Durum ekranını görebilmek için Internet Explorer yerine <b>Chrome</b> ya da <b>Firefox</b> kurup ' +
+    'varsayılan tarayıcı yapın; sonra program simgesine yeniden tıklayın.</p></div>';
+}
+</script>
 <script>
 const TOKEN = "{{.Token}}";
 const ILK = {{.IlkVeri}};
