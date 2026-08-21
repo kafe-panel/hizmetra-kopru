@@ -59,3 +59,9 @@ func panoOku() string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// uiTrayIcinde — macOS'ta TÜM pencere işleri (kurulum sihirbazı + durum ekranı)
+// tepsi döngüsü BAŞLADIKTAN sonra yapılmalıdır: AppKit pencereleri yalnız ana
+// iş parçacığında, çalışan bir run loop ile kurulabilir (bkz. main.go akış notu
+// ve internal/pencere/pencere_darwin.m).
+const uiTrayIcinde = true

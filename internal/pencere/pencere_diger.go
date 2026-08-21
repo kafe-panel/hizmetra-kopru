@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && (!darwin || !cgo)
 
 // Package pencere — Windows dışı derlemede no-op (CI/geliştirme). WebView2
 // yalnız Windows'ta anlamlı; ajan Windows hedeflidir (platform_diger.go ile

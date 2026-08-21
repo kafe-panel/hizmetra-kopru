@@ -83,11 +83,13 @@ type zarf struct {
 
 func (c *Client) istek(metot, yol string, govde any, cikti any, timeout time.Duration) error {
 	var okuyucu io.Reader
+	var govdeHam []byte // yedek TLS yolunda isteği yeniden kurmak için saklanır
 	if govde != nil {
 		b, err := json.Marshal(govde)
 		if err != nil {
 			return fmt.Errorf("kopru: gövde kodlanamadı: %w", err)
 		}
+		govdeHam = b
 		okuyucu = bytes.NewReader(b)
 	}
 	istek, err := http.NewRequest(metot, c.BaseURL+yol, okuyucu)
@@ -107,6 +109,21 @@ func (c *Client) istek(metot, yol string, govde any, cikti any, timeout time.Dur
 		istemci = &kopya
 	}
 	cevap, err := istemci.Do(istek)
+	// ESKİ WINDOWS KURTARMASI: sertifika doğrulaması başarısızsa isteği BİR KEZ
+	// gömülü ISRG kökleriyle tekrarla (bkz. kok_sertifika.go). Win7'nin fabrika
+	// kök deposunda ISRG Root X1/X2 yoktur ve Windows Update'ten çekemeyen bir
+	// makinede ajan sunucuya HİÇ bağlanamazdı. Doğrulama ATLANMAZ — yalnız güven
+	// çıpası ikili içinden gelir. Gövde yeniden kurulur (okuyucu tüketilmiş olur).
+	if err != nil && sertifikaHatasiMi(err) {
+		var yeniden io.Reader
+		if len(govdeHam) > 0 {
+			yeniden = bytes.NewReader(govdeHam)
+		}
+		if istek2, err2 := http.NewRequest(metot, c.BaseURL+yol, yeniden); err2 == nil {
+			istek2.Header = istek.Header.Clone()
+			cevap, err = yedekIstemci(timeout).Do(istek2)
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("kopru: bağlantı: %w", err)
 	}
