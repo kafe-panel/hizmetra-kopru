@@ -13,26 +13,116 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
+
+      # ⚠️ MAYIN MUHAFIZI (2026-08-21) — bu adım SİLİNMEMELİ.
+      # ESKİ Windows/macOS kanalları Go 1.20 ile derlenir ve Go 1.20 üç parçalı
+      # ("1.23.1" gibi) bir `go` direktifini AYRIŞTIRAMAZ. `go mod tidy` ya da bir
+      # bağımlılık yükseltmesi direktifi yükseltirse eski kanal TAG ANINDA patlar
+      # (v0.9.0'da bu yaşandı: legacy-windows job'ı "invalid go version '1.23.1'"
+      # ile öldü). PR'da yakalamak, yayında yakalamaktan sonsuz kez ucuzdur.
+      - name: go.mod 'go' direktifi 1.20 mi (eski kanal muhafızı)
+        run: |
+          grep -qx 'go 1.20' go.mod || {
+            echo "HATA: go.mod 'go' direktifi 1.20 olmali (eski Windows/macOS kanallari Go 1.20 ile derleniyor)."
+            grep '^go ' go.mod
+            exit 1
+          }
+
       - run: go vet ./...
       - run: go test ./... -race
+
       # Asıl hedef Windows — derlemenin bozulmadığını her PR'da doğrula.
       - run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./...
-      # 32-bit Windows (eski/ucuz kafe kasaları) ARTIK DESTEKLENİYOR — installer
-      # bu ikiliyi de taşıyor. Derlemenin bozulmadığını her PR'da doğrula.
+      # 32-bit Windows (eski/ucuz kafe kasaları) — installer bu ikiliyi de taşır.
       - run: CGO_ENABLED=0 GOOS=windows GOARCH=386 go build ./...
-      # Linux + macOS de desteklenir (CUPS baskı/keşif). Cross-compile'ın
-      # bozulmadığını her PR'da doğrula. macOS'un cmd paketi systray-cgo ister
-      # (bkz. release.yml "macos" job) → burada YALNIZ internal/... (CUPS kodu
-      # dahil) cgo'suz derlenir; tam macOS ikilisi release'de macos-latest'te üretilir.
+      # Linux: paket ürettiğimiz TÜM mimariler derlenmeli (.goreleaser.yaml ile
+      # birebir aynı liste). Eskiden yalnız amd64 derleniyordu; arm64/386/armv7
+      # ilk kez tag anında derlenirdi → mimariye özgü hata yayında patlardı.
       - run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./...
+      - run: CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./...
+      - run: CGO_ENABLED=0 GOOS=linux GOARCH=386 go build ./...
+      - run: CGO_ENABLED=0 GOARM=7 GOOS=linux GOARCH=arm go build ./...
+
+  # ─── ESKİ KANAL (Go 1.20) DERLEME KAPISI ───────────────────────────────────
+  # Eski Windows (Win7/8/8.1) ve eski macOS (10.13/10.14) ikilileri Go 1.20 ile
+  # derlenir. Bu job olmadan Go 1.21+ stdlib'i (log/slog, slices, maps, cmp,
+  # math/rand/v2) ya da yeni bir dil özelliği PR'da YEŞİL geçiyor, sonra tag
+  # atıldığında release patlıyordu. Komutlar release.yml'deki legacy-* job'larıyla
+  # BİREBİR aynıdır — burada geçen orada da geçer.
+  legacy-build:
+    name: Eski kanal derlemesi (Go 1.20 — Win7/8/8.1 + macOS 10.13/10.14)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.20"
+      - run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Kanal=eski" ./cmd/hizmetra-kopru
+      - run: CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -ldflags "-X main.Kanal=eski" ./cmd/hizmetra-kopru
+      # macOS cmd paketi cgo (Cocoa tray) ister → burada YALNIZ internal/...
+      # cgo'suz derlenir; tam darwin ikilisi aşağıdaki macos job'ında doğrulanır.
       - run: CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build ./internal/...
 
-  # Installer'ın DERLENDİĞİNİ her PR'da doğrula. Öncesinde .iss YALNIZ tag'li
-  # release'te (installer job) derleniyordu → bir Pascal/sözdizimi hatası ancak
-  # yayın anında, sürüm çıkarken patlıyordu. Burada gerçek exe'lere gerek yok:
-  # iscc dosyaların VARLIĞINI arar, içeriğine bakmaz → sahte dosyalar yeter.
+  # ─── macOS CGO DERLEME KAPISI ──────────────────────────────────────────────
+  # cmd/hizmetra-kopru macOS'ta systray (Cocoa/Objective-C) yüzünden CGO_ENABLED=1
+  # ister; ubuntu'dan cross-compile EDİLEMEZ. Bu job olmadan darwin'e özgü Go
+  # dosyalarındaki (platform_ek_darwin.go, autostart_darwin.go, guncelle_darwin.go)
+  # bir hata ancak TAG ANINDA görülürdü. Hem modern (1.22) hem eski (1.20) kanal
+  # derlenir; ayrıca .app/.dmg paketleyicisi gerçek araçlarla (lipo/codesign/
+  # hdiutil) çalıştırılıp çıktının minos + imza damgası DOĞRULANIR.
+  macos:
+    name: macOS derlemesi + paketleme (CGO)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Modern darwin ikilileri (amd64 10.15 + arm64 11.0)
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          for arch in amd64 arm64; do
+            if [ "$arch" = "amd64" ]; then HEDEF=10.15; else HEDEF=11.0; fi
+            MACOSX_DEPLOYMENT_TARGET="$HEDEF" \
+            CGO_CFLAGS="-mmacosx-version-min=$HEDEF" \
+            CGO_LDFLAGS="-mmacosx-version-min=$HEDEF" \
+            GOOS=darwin GOARCH="$arch" go build -o "hizmetra-kopru_darwin_$arch" ./cmd/hizmetra-kopru
+          done
+      - name: Paketleyici çalışıyor mu + minos/imza doğru mu
+        env:
+          MIN_MACOS: "10.15"
+          DMG_ADI: HizmetraYazici.dmg
+        run: |
+          bash packaging/macos/paket.sh 0.0.0
+          UYG="dist-macos/Hizmetra Yazıcı.app/Contents/MacOS/hizmetra-kopru"
+          echo "--- mimariler"; lipo -info "$UYG"
+          echo "--- imza (ad-hoc bekleniyor)"; codesign -dv "$UYG" 2>&1 | head -4
+          # Ad-hoc imza YOKSA Apple Silicon'da uygulama "damaged" der ve kullanıcı siler.
+          codesign --verify --verbose=2 "$UYG" || { echo "HATA: ad-hoc imza dogrulanamadi"; exit 1; }
+          # Info.plist beyanı ikilinin gerçek tabanıyla eşleşmeli.
+          grep -A1 LSMinimumSystemVersion "dist-macos/Hizmetra Yazıcı.app/Contents/Info.plist"
+          grep -q "<string>10.15</string>" "dist-macos/Hizmetra Yazıcı.app/Contents/Info.plist" \
+            || { echo "HATA: LSMinimumSystemVersion 10.15 degil"; exit 1; }
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.20"
+      - name: Eski-macOS ikilisi (Go 1.20, hedef 10.13)
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          MACOSX_DEPLOYMENT_TARGET=10.13 \
+          CGO_CFLAGS="-mmacosx-version-min=10.13" \
+          CGO_LDFLAGS="-mmacosx-version-min=10.13" \
+          GOOS=darwin GOARCH=amd64 go build \
+            -ldflags "-X main.Kanal=eski" \
+            -o hizmetra-kopru-eski_darwin_amd64 ./cmd/hizmetra-kopru
+          vtool -show-build hizmetra-kopru-eski_darwin_amd64 | grep -E "platform|minos" || true
+
+  # Installer'ların DERLENDİĞİNİ her PR'da doğrula. iscc dosyaların VARLIĞINI
+  # arar, içeriğine bakmaz → sahte dosyalar yeter.
   installer:
-    name: Inno Setup betiği derleniyor mu
+    name: Inno Setup betikleri derleniyor mu
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,5 +133,11 @@ jobs:
         run: |
           Set-Content -Path installer\hizmetra-kopru.exe -Value "sahte"
           Set-Content -Path installer\hizmetra-kopru_windows_386.exe -Value "sahte"
-      - name: iscc ile derle
+          Set-Content -Path installer\hizmetra-kopru-eski.exe -Value "sahte"
+          Set-Content -Path installer\hizmetra-kopru-eski_windows_386.exe -Value "sahte"
+      - name: Modern installer
         run: iscc "/DMyAppVersion=0.0.0" installer\hizmetra-yazici.iss
+      # ESKİ installer da derlensin: eskiden yalnız modern .iss doğrulanıyordu,
+      # eski .iss'teki bir Pascal/sözdizimi hatası ancak yayında patlardı.
+      - name: Eski Windows installer
+        run: iscc "/DMyAppVersion=0.0.0" installer\hizmetra-yazici-eski.iss

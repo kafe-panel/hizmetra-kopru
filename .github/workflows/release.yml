@@ -60,11 +60,27 @@ jobs:
           CGO_ENABLED: "1"
         run: |
           VER="${GITHUB_REF_NAME#v}"
+          # ⚠️ MACOSX_DEPLOYMENT_TARGET ŞART (2026-08-21 denetimi).
+          # CGO_ENABLED=1 → HARİCİ bağlama → Go bağlayıcısı LC_BUILD_VERSION'ı
+          # clang'ın ürettiği host object'lerinden KOPYALAR; clang'ın varsayılan
+          # deployment target'ı ise RUNNER'IN macOS SÜRÜMÜDÜR. Bu değişken
+          # olmadan ikili "yalnız runner'ın macOS'u ve üstünde açılır" damgası
+          # taşıyordu → macOS 12/13/14 Intel Mac'lerde uygulama HİÇ AÇILMIYORDU.
+          # amd64 = 10.15 (Go 1.22 tabanı), arm64 = 11.0 (Apple Silicon tabanı).
           for arch in amd64 arm64; do
+            if [ "$arch" = "amd64" ]; then HEDEF=10.15; else HEDEF=11.0; fi
+            MACOSX_DEPLOYMENT_TARGET="$HEDEF" \
+            CGO_CFLAGS="-mmacosx-version-min=$HEDEF" \
+            CGO_LDFLAGS="-mmacosx-version-min=$HEDEF" \
             GOOS=darwin GOARCH="$arch" go build \
               -ldflags "-s -w -X main.Surum=$VER" \
               -o "hizmetra-kopru_darwin_$arch" \
               ./cmd/hizmetra-kopru
+          done
+          # DOĞRULAMA — varsayıma güvenme: her dilimin minos'u beklenen mi?
+          for arch in amd64 arm64; do
+            echo "--- hizmetra-kopru_darwin_$arch"
+            vtool -show-build "hizmetra-kopru_darwin_$arch" | grep -E "platform|minos|sdk" || true
           done
 
       - name: Darwin ikililerini release'e yükle
@@ -82,6 +98,11 @@ jobs:
       # evrensel yapar, Info.plist + icon.icns'i ekler, imzasız .dmg'yi üretir.
       # (Kod imzalama sertifikası gelince buraya codesign + notarize eklenecek.)
       - name: macOS .app + .dmg paketle
+        # MIN_MACOS, ikilinin GERÇEK tabanıyla eşleşmeli (Info.plist yalan beyan
+        # etmesin — bkz. Info.plist.template yorumu). Modern kanal = 10.15.
+        env:
+          MIN_MACOS: "10.15"
+          DMG_ADI: HizmetraYazici.dmg
         run: bash packaging/macos/paket.sh "${GITHUB_REF_NAME#v}"
 
       - name: DMG'yi release'e yükle
@@ -90,6 +111,59 @@ jobs:
         run: |
           gh release upload "${{ github.ref_name }}" \
             dist-macos/HizmetraYazici.dmg \
+            --repo "${{ github.repository }}" --clobber
+
+  # ─── ESKİ macOS (10.13 High Sierra / 10.14 Mojave) — Go 1.20 ile derlenir ───
+  # Windows'taki legacy-windows job'ının BİREBİR macOS ikizi. Gerekçe: Go 1.21'den
+  # beri üretilen ikililer macOS 10.15+ ister (Go 1.20 release notes: "Go 1.20 is
+  # the last release that will run on macOS 10.13 High Sierra or 10.14 Mojave").
+  # Modern kanal (Go 1.22) o Mac'lerde HİÇ AÇILMAZ.
+  #
+  # YALNIZ Intel (amd64): macOS 10.13/10.14 yalnız Intel Mac'lerde vardır; Apple
+  # Silicon'ın tabanı zaten Big Sur 11'dir ve onu modern kanal kapsar. Bu yüzden
+  # .dmg Intel-only üretilir (paket.sh arm64 ikilisi yoksa tek mimari paketler).
+  # `-X main.Kanal=eski`: oto-güncelleme "darwin_eski" anahtarını ister — modern
+  # .dmg eski Mac'te çalışmaz. Ajan MODERN bir Mac'te çalışıyorsa (kullanıcı
+  # yanlış indirdiyse) moderniDestekliyor() true döner ve modern kanala TERFİ eder.
+  legacy-macos:
+    name: Eski macOS ikilisi + .dmg (Go 1.20 — 10.13/10.14)
+    needs: goreleaser
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.20"
+
+      - name: Eski-macOS ikilisini derle (amd64, Go 1.20, hedef 10.13)
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          MACOSX_DEPLOYMENT_TARGET=10.13 \
+          CGO_CFLAGS="-mmacosx-version-min=10.13" \
+          CGO_LDFLAGS="-mmacosx-version-min=10.13" \
+          GOOS=darwin GOARCH=amd64 go build \
+            -ldflags "-s -w -X main.Surum=$VER -X main.Kanal=eski" \
+            -o "hizmetra-kopru-eski_darwin_amd64" \
+            ./cmd/hizmetra-kopru
+          echo "--- minos doğrulaması (10.13 bekleniyor)"
+          vtool -show-build "hizmetra-kopru-eski_darwin_amd64" | grep -E "platform|minos|sdk" || true
+
+      - name: Eski-macOS .app + .dmg paketle
+        env:
+          MIN_MACOS: "10.13"
+          DMG_ADI: HizmetraYazici-EskiMac.dmg
+        # 3. argüman (arm64 ikilisi) BİLEREK verilmiyor → Intel-only paket.
+        run: bash packaging/macos/paket.sh "${GITHUB_REF_NAME#v}" hizmetra-kopru-eski_darwin_amd64
+
+      - name: Eski-macOS ikilisini ve DMG'yi release'e yükle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            hizmetra-kopru-eski_darwin_amd64 \
+            dist-macos/HizmetraYazici-EskiMac.dmg \
             --repo "${{ github.repository }}" --clobber
 
   # Inno Setup installer (Task C4). AYRI job + windows-latest ZORUNLU: goreleaser

@@ -8,17 +8,30 @@ modem/router ayarı, port açma veya sabit IP **gerekmez**.
 
 ## Sistem gereksinimleri
 
+Her işletim sistemi ve sürümü için bir paket var — panelde bilgisayarınıza uygun kart
+işaretli gelir.
+
+| İşletim sistemi | İndirilecek paket |
+|---|---|
+| **Windows 10 / 11**, Server 2016+ | `HizmetraYaziciKurulum.exe` |
+| **Windows 7 SP1 / 8 / 8.1**, Server 2008 R2 – 2012 R2 | `HizmetraYaziciKurulum-EskiWindows.exe` |
+| **macOS 10.15 Catalina ve üstü** (Intel + Apple Silicon) | `HizmetraYazici.dmg` |
+| **macOS 10.13 High Sierra / 10.14 Mojave** (Intel) | `HizmetraYazici-EskiMac.dmg` |
+| **Linux** — Debian/Ubuntu · Fedora/RHEL/openSUSE · Alpine · Arch | `.deb` · `.rpm` · `.apk` · `archlinux` |
+
 | | |
 |---|---|
-| **Windows** | **10 veya 11** (Windows 7 / 8 / 8.1 desteklenmez) |
-| **Mimari** | 64-bit **ve** 32-bit — kurulum paketi ikisini de taşır, doğru olanı kendi seçer |
+| **Mimari** | Windows: 64-bit **ve** 32-bit (kurulum doğru olanı kendi seçer) · macOS: Intel + Apple Silicon · Linux: amd64, arm64, i386, armv7 (Raspberry Pi) |
 | **İnternet** | Giden HTTPS yeterli; port açma/sabit IP gerekmez |
-| **Diğer** | Arayüz penceresi için Edge WebView2; yoksa kurulum sırasında otomatik kurulur |
+| **Windows** | Arayüz penceresi için Edge WebView2; yoksa kurulum sırasında otomatik kurulur (Win7/8'de WebView2 yoktur → arayüz tarayıcıda açılır) |
+| **Linux** | `cups-client` + `xdg-utils` (paket kendisi kurar). GNOME'da tepsi simgesi için AppIndicator eklentisi gerekir; Ubuntu'da hazır gelir |
 
-> **Windows 7/8/8.1 neden desteklenmiyor?** Program Go ile derleniyor; Go 1.21'den bu yana
-> üretilen çalıştırılabilir dosyalar Windows 10 / Server 2016 ve üstünü zorunlu kılıyor.
-> Bu sürümlerde kurulum baştan durur ve nedenini söyler (sessizce açılmayan bir program
-> kurmaktansa açık bir uyarı vermek daha doğru).
+> **Neden iki ayrı Windows / macOS paketi?** Program Go ile derleniyor ve Go'nun taban
+> işletim sistemi sürümü zamanla yükseldi: Go 1.21+ ile üretilen ikili Windows 10 /
+> macOS 10.15 ve üstünü zorunlu kılıyor. Eski makineleri desteklemek için o kanal
+> **Go 1.20** ile ayrıca derleniyor (`-X main.Kanal=eski`). Yanlış paketi indirirseniz
+> kurulum baştan durur ve doğrusunu söyler. Eski paket yeni bir makinede çalışıyorsa
+> ajan kendini otomatik olarak modern kanala terfi ettirir.
 
 ## Kurulum (3 dakika)
 
@@ -65,9 +78,11 @@ yenisinde yeni kurulum kodu ile kurun.
 
 **Kurulum bitti ama program açılmıyor.** Sırayla kontrol edin:
 
-1. **Windows sürümü.** `Windows tuşu + R` → `winver` → Enter. Sürüm **10** veya **11**
-   değilse program çalışmaz (bkz. Sistem gereksinimleri). Kurulum paketi bunu artık
-   baştan söyler; daha eski bir paketle kurduysanız sessizce açılmamış olabilir.
+1. **Yanlış paket olabilir.** `Windows tuşu + R` → `winver` → Enter. Sürüm **10/11**
+   değilse (7, 8, 8.1) `HizmetraYaziciKurulum-EskiWindows.exe` paketini indirin —
+   normal paket o sürümlerde açılmaz. Mac'te  → **Bu Mac Hakkında**: 10.13/10.14
+   ise `HizmetraYazici-EskiMac.dmg` gerekir. Kurulum paketi yanlış paketi artık
+   baştan reddedip doğrusunu söyler.
 2. **Zaten çalışıyor olabilir.** Saatin yanındaki **gizli simgeler (^)** okunu açın;
    Hizmetra Yazıcı simgesi oradaysa program açık demektir — simgeye tıklayın.
 3. **Antivirüs silmiş olabilir.** Program henüz dijital imzalı olmadığı için bazı

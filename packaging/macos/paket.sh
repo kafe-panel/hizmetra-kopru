@@ -8,9 +8,17 @@
 # Girdi: aynı dizinde daha önce derlenmiş darwin ikilileri
 #   hizmetra-kopru_darwin_amd64  ve  hizmetra-kopru_darwin_arm64
 # (release.yml'in "Darwin ikililerini derle" adımı üretir).
-# Çıktı: dist-macos/HizmetraYazici.dmg  (imzasız — bkz. packaging/macos/BENI-OKU.txt)
+# Çıktı: dist-macos/$DMG_ADI  (imzasız — bkz. packaging/macos/BENI-OKU.txt)
 #
 # Kullanım:  bash packaging/macos/paket.sh <surum> [amd64_ikili] [arm64_ikili]
+#
+# ORTAM DEĞİŞKENLERİ (2026-08-21 — iki kanal):
+#   MIN_MACOS : Info.plist LSMinimumSystemVersion (varsayılan 10.15)
+#   DMG_ADI   : çıktı .dmg adı (varsayılan HizmetraYazici.dmg)
+# MODERN:  MIN_MACOS=10.15  DMG_ADI=HizmetraYazici.dmg          (amd64+arm64)
+# ESKİ  :  MIN_MACOS=10.13  DMG_ADI=HizmetraYazici-EskiMac.dmg  (YALNIZ amd64)
+# arm64 ikilisi verilmezse paket Intel-only üretilir — ESKİ kanal için DOĞRUDUR:
+# macOS 10.13/10.14 yalnız Intel Mac'lerde vardır, Apple Silicon tabanı Big Sur 11.
 set -euo pipefail
 # Türkçe dosya adları ("Hizmetra Yazıcı.app") için UTF-8 yerel ayar şart:
 # GitHub macOS runner'ında LANG bazen ayarsız (C locale) gelir ve non-ASCII
@@ -20,6 +28,8 @@ export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 VER="${1:?kullanım: paket.sh <surum> [amd64_ikili] [arm64_ikili]}"
 AMD64_BIN="${2:-hizmetra-kopru_darwin_amd64}"
 ARM64_BIN="${3:-hizmetra-kopru_darwin_arm64}"
+MIN_MACOS="${MIN_MACOS:-10.15}"
+DMG_ADI="${DMG_ADI:-HizmetraYazici.dmg}"
 
 # Repo kökü (bu script packaging/macos/ altında).
 KOK="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -27,9 +37,10 @@ CIKTI="dist-macos"
 BUNDLE="Hizmetra Yazıcı.app"
 CONTENTS="$CIKTI/$BUNDLE/Contents"
 
-for f in "$AMD64_BIN" "$ARM64_BIN"; do
-  [ -f "$f" ] || { echo "HATA: darwin ikilisi bulunamadı: $f" >&2; exit 1; }
-done
+[ -f "$AMD64_BIN" ] || { echo "HATA: darwin amd64 ikilisi bulunamadı: $AMD64_BIN" >&2; exit 1; }
+# arm64 OPSİYONEL (eski kanal Intel-only üretir).
+ARM64_VAR=0
+[ -f "$ARM64_BIN" ] && ARM64_VAR=1
 
 rm -rf "$CIKTI"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
@@ -37,12 +48,29 @@ mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 # 1) Evrensel (universal2) ikili: TEK .app hem Intel (amd64) hem Apple Silicon
 #    (arm64) Mac'lerde çalışsın — kafe sahibi mimari seçmek zorunda kalmasın.
 echo "==> lipo: evrensel ikili"
-lipo -create "$AMD64_BIN" "$ARM64_BIN" -output "$CONTENTS/MacOS/hizmetra-kopru"
+if [ "$ARM64_VAR" = "1" ]; then
+  echo "    evrensel (amd64 + arm64)"
+  lipo -create "$AMD64_BIN" "$ARM64_BIN" -output "$CONTENTS/MacOS/hizmetra-kopru"
+else
+  echo "    tek mimari: Intel (amd64) — eski macOS kanalı"
+  cp "$AMD64_BIN" "$CONTENTS/MacOS/hizmetra-kopru"
+fi
 chmod +x "$CONTENTS/MacOS/hizmetra-kopru"
+
+# AD-HOC KOD İMZASI — lipo'DAN SONRA yapılmak ZORUNDA (2026-08-21).
+# Apple Silicon'da çekirdek imzasız arm64 kodu ÇALIŞTIRMAZ (SIGKILL); Finder bunu
+# "uygulama zarar görmüş, Çöp'e taşıyın" diye gösterir ve kullanıcı uygulamayı
+# siler. Go bağlayıcısı darwin/arm64'ü derlerken otomatik ad-hoc imzalar, AMA
+# `lipo -create` ikiliyi yeniden yazdığı için o mühür geçersizleşir.
+# `--deep` KULLANILMAZ (Apple DTS önermiyor): önce çalıştırılabilir, sonra bundle.
+# Bu, Gatekeeper uyarısını KALDIRMAZ (onun için Developer ID + notarization
+# gerekir) ama "damaged" hatasını engeller ve "Yine de Aç" yolunu AÇAR.
+echo "==> ad-hoc kod imzası"
+codesign --force --sign - "$CONTENTS/MacOS/hizmetra-kopru"
 
 # 2) Info.plist — sürüm şablondan doldurulur.
 echo "==> Info.plist ($VER)"
-sed "s/__VERSION__/${VER}/g" "$KOK/packaging/macos/Info.plist.template" > "$CONTENTS/Info.plist"
+sed -e "s/__VERSION__/${VER}/g" -e "s/__MINOS__/${MIN_MACOS}/g"   "$KOK/packaging/macos/Info.plist.template" > "$CONTENTS/Info.plist"
 
 # 3) icon.icns — assets/hizmetra.png'den (256px) iconset üret + iconutil.
 #    Kaynak 256px olduğu için 512/1024 (@2x üstü) katmanlar ATLANIR; iconutil
@@ -65,6 +93,12 @@ iconutil -c icns "$ICONSET" -o "$CONTENTS/Resources/icon.icns"
 # 4) PkgInfo — Finder için standart (isteğe bağlı ama gelenek).
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 
+# 4b) BUNDLE AD-HOC İMZASI — tüm içerik (Info.plist, icon.icns, PkgInfo)
+# yerleştikten SONRA. Bundle mührü, .app'in aktarım sırasında bozulmadığını
+# doğrular; imzasız bundle Apple Silicon'da "damaged" hatasına yol açar.
+echo "==> bundle ad-hoc imzası"
+codesign --force --sign - "$CIKTI/$BUNDLE"
+
 # 5) .dmg — "Applications'a sürükle" arayüzü: .app + Applications symlink + not.
 echo "==> .dmg"
 DMGROOT="$CIKTI/dmgroot"
@@ -73,6 +107,11 @@ cp -R "$CIKTI/$BUNDLE" "$DMGROOT/"
 ln -s /Applications "$DMGROOT/Applications"
 cp "$KOK/packaging/macos/BENI-OKU.txt" "$DMGROOT/BENI-OKU.txt"
 hdiutil create -volname "Hizmetra Yazıcı" -srcfolder "$DMGROOT" \
-  -ov -format UDZO "$CIKTI/HizmetraYazici.dmg"
+  -ov -format UDZO "$CIKTI/$DMG_ADI"
 
-echo "==> TAMAM: $CIKTI/HizmetraYazici.dmg"
+# Doğrulama — varsayıma güvenme (CI'da sessiz bozulmayı yakalar).
+echo "==> doğrulama"
+lipo -info "$CONTENTS/MacOS/hizmetra-kopru" || true
+codesign -dv "$CIKTI/$BUNDLE" 2>&1 | head -5 || true
+
+echo "==> TAMAM: $CIKTI/$DMG_ADI (minimum macOS $MIN_MACOS)"

@@ -164,6 +164,30 @@
   }
   #kartBasarili { text-align: center; }
   #kartBasarili .alt-metin { margin-bottom: 0; }
+  /* ── ESKİ WINDOWS / IE11 UYUMU (2026-08-21) ──────────────────────────────
+     Win7/8/8.1'de WebView2 YOKTUR → ajan arayüzü sistem tarayıcısında açar ve
+     stok Win7'nin varsayılan tarayıcısı IE11'dir. IE11 CSS custom property
+     (var(--x)) DESTEKLEMEZ: var() taşıyan HER bildirimi yok sayar, sayfa
+     okunmaz hale gelirdi (beyaz üstüne beyaz). Bu blok YALNIZ IE10/11'de
+     uygulanır (-ms-high-contrast, Microsoft'un kendi tarayıcı-özel medya
+     sorgusu) ve literal renklerle okunur bir görünüm verir. Modern tarayıcılar
+     bu bloğu HİÇ görmez → mevcut tasarım aynen korunur.
+     `[hidden]` kuralı da burada: IE11 bazı durumlarda hidden özniteliğine
+     display:none uygulamaz, kurulum ve "Bağlandı" kartı ÜST ÜSTE görünürdü. */
+  [hidden] { display: none !important; }
+  @media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
+    body { background: #f4f6f9; color: #0f172a; }
+    .kart { background: #ffffff; border: 1px solid #e5e7eb; }
+    .logo-chip { background: #ffffff; border: 1px solid #e5e7eb; }
+    h1 { color: #0f172a; }
+    .alt-metin, .serit-alt-kucuk, .kosullar, .adimlar { color: #64748b; }
+    .etiket { color: #94a3b8; }
+    .kod-input { background: #ffffff; color: #0f172a; border: 1px solid #e5e7eb; }
+    .dugme { background: #0d9488; color: #ffffff; }
+    .dugme-ikincil { background: #ffffff; color: #0f172a; border: 1px solid #e5e7eb; }
+    .hata-kutusu { background: #fef2f2; border: 1px solid #ef4444; }
+    .basari-simge { background: #ecfdf5; color: #047857; }
+  }
 </style>
 </head>
 <body>
@@ -195,7 +219,15 @@
   </div>
 
 <script>
-const KOD_ONERI = "{{.KodOneri}}";
+/* ⚠️ ESKİ WINDOWS KURALI (2026-08-21): Bu dosya IE11'de de ÇALIŞMAK ZORUNDA.
+   Win7/8/8.1'de WebView2 yoktur → sayfa sistem tarayıcısında (stok kurulumda
+   IE11) açılır. Bu yüzden burada YALNIZ ES5 kullanılır: const/let, ok
+   fonksiyonu, şablon dizesi, fetch, Promise, spread YASAK. Eskiden `fetch`
+   kullanılıyordu; IE11'de `fetch` tanımsız olduğu ve çağrı btn.disabled=true
+   satırından SONRA geldiği için ReferenceError .catch()'e düşmüyordu → buton
+   sonsuza dek "Bağlanıyor…"da kilitleniyor, 6 haneli kod HİÇ gönderilemiyordu
+   (yani eski Windows'ta kurulum TAMAMLANAMIYORDU). Artık XHR kullanılıyor. */
+var KOD_ONERI = "{{.KodOneri}}";
 
 var girdi = document.getElementById("kod");
 if (/^\d{6}$/.test(KOD_ONERI)) girdi.value = KOD_ONERI;
@@ -223,30 +255,48 @@ function gonder() {
   hataKutusu.hidden = true;
   btn.disabled = true;
   btn.textContent = "Bağlanıyor…";
-  fetch("/eslestir-dene", { method: "POST", body: kod })
-    .then(function (r) { return r.json(); })
-    .then(function (v) {
-      if (v.basarili) {
-        kartForm.hidden = true;
-        kartBasarili.hidden = false;
-        document.getElementById("basariBaslik").textContent = "Bağlandı: " + v.isletme_ad;
-        document.getElementById("basariAlt").textContent =
-          "Bilgisayar açıldığında program kendiliğinden çalışacak. Birazdan durum penceresine yönlendirileceksiniz…";
-      } else {
-        hataGoster(v.hata || "Bilinmeyen hata.");
-      }
-    })
-    .catch(function () {
-      hataGoster("Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.");
-    });
+
+  // XMLHttpRequest — IE11 dahil HER tarayıcıda var (bkz. dosya başındaki not).
+  var x = new XMLHttpRequest();
+  x.open("POST", "/eslestir-dene", true);
+  x.onload = function () {
+    var v;
+    try {
+      v = JSON.parse(x.responseText);
+    } catch (e) {
+      hataGoster("Sunucudan beklenmeyen yanıt geldi. Tekrar deneyin.");
+      return;
+    }
+    if (v && v.basarili) {
+      kartForm.hidden = true;
+      kartBasarili.hidden = false;
+      document.getElementById("basariBaslik").textContent = "Bağlandı: " + v.isletme_ad;
+      document.getElementById("basariAlt").textContent =
+        "Bilgisayar açıldığında program kendiliğinden çalışacak. Birazdan durum penceresine yönlendirileceksiniz…";
+    } else {
+      hataGoster((v && v.hata) || "Bilinmeyen hata.");
+    }
+  };
+  x.onerror = function () {
+    hataGoster("Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.");
+  };
+  x.send(kod);
 }
 
 btn.addEventListener("click", gonder);
 btnTekrar.addEventListener("click", function () { hataKutusu.hidden = true; });
-girdi.addEventListener("keydown", function (e) { if (e.key === "Enter") gonder(); });
-girdi.addEventListener("input", function () {
-  girdi.value = girdi.value.replace(/[^0-9]/g, "").slice(0, 6);
+// e.key IE11'de de "Enter" döner ama bazı eski/yerelleştirilmiş yapılarda
+// farklılaşabildiği için keyCode yedeği bırakıldı (ES5 güvenli).
+girdi.addEventListener("keydown", function (e) {
+  if (e.key === "Enter" || e.keyCode === 13) gonder();
 });
+// IE11 'input' olayını <input type=text>'te destekler; 'keyup' yedeği eski
+// yapılarda yapıştırma/otomatik doldurma sonrası temizliği garantiler.
+function girdiTemizle() {
+  girdi.value = girdi.value.replace(/[^0-9]/g, "").slice(0, 6);
+}
+girdi.addEventListener("input", girdiTemizle);
+girdi.addEventListener("keyup", girdiTemizle);
 </script>
 </body>
 </html>

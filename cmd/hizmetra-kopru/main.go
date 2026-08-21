@@ -325,12 +325,17 @@ func surumKontrolDongusu() {
 		case bilgi.Surum != "" && surum.YeniMi(bilgi.Surum, Surum):
 			// Bu OS/mimari için DOĞRU paketi seç (Windows installer, macOS .dmg,
 			// Linux .deb). Adres yoksa şeridi HİÇ gösterme (yanlış dosya inmesin).
-			// ESKİ WINDOWS kanalı (Go 1.20 build): "windows_eski" anahtarını iste — modern
-			// installer (Go 1.21+) eski Windows'ta kurulmaz; ajan kendini ESKİ installer'la
-			// güncellemeli (yoksa IndirmeURLIcin "windows"e düşer).
+			// KANAL SEÇİMİ — damgaya DEĞİL, makinenin GERÇEK sürümüne bakar.
+			// ESKİ kanal ikilisi (Go 1.20; Win7/8/8.1 ve macOS 10.13/10.14 için) kendini
+			// "windows_eski"/"darwin_eski" paketiyle günceller — modern installer o
+			// makinelerde KURULMAZ. Ama aynı ikili YETERİNCE YENİ bir makinede
+			// çalışıyorsa (kullanıcı panelde yanlış kartı indirdiyse) modern kanala
+			// TERFİ eder: moderniDestekliyor() true döner, ek "_eski" konmaz.
+			// Böylece "yanlış indirdim, ömür boyu eski kanaldayım" kilidi oluşmaz
+			// (bkz. platform_ek_windows.go / platform_ek_darwin.go).
 			osAnahtar := runtime.GOOS
-			if Kanal == "eski" && runtime.GOOS == "windows" {
-				osAnahtar = "windows_eski"
+			if Kanal == "eski" && !moderniDestekliyor() {
+				osAnahtar = runtime.GOOS + "_eski"
 			}
 			indirmeURL := bilgi.IndirmeURLIcin(osAnahtar, runtime.GOARCH)
 			if indirmeURL == "" {
@@ -653,11 +658,12 @@ func sonIsSatirlari(n int) []string {
 // panodanKodOner — panoda tam 6 haneli sayı varsa giriş alanına önerir (panel
 // "Kopyala" butonuyla akışı tek tıka indirir). Pano okunamazsa boş döner.
 func panodanKodOner() string {
-	out, err := exec.Command("powershell", "-NoProfile", "-Command", "Get-Clipboard").Output()
-	if err != nil {
-		return ""
-	}
-	s := strings.TrimSpace(string(out))
+	// Pano okuma PLATFORMA ÖZGÜ (bkz. platform_ek_*.go): Windows'ta gizli
+	// PowerShell (konsol penceresi çakmaz), macOS'ta pbpaste, Linux'ta
+	// wl-paste/xclip/xsel. Eskiden her platformda "powershell" çağrılıyordu →
+	// Mac/Linux'ta bu işlev HİÇ çalışmıyordu, Windows'ta ise siyah konsol
+	// penceresi açıyordu.
+	s := panoOku()
 	if len(s) == 6 && strings.IndexFunc(s, func(r rune) bool { return r < '0' || r > '9' }) == -1 {
 		return s
 	}
