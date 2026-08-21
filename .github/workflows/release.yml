@@ -49,11 +49,50 @@ jobs:
     name: macOS derlemesi (CGO — Cocoa tray)
     needs: goreleaser
     runs-on: macos-latest
+    # Apple secret'ları JOB seviyesinde: adım-seviyesi env, o adımın KENDİ
+    # `if` koşulunda görünmez (if, env kurulmadan önce değerlendirilir). Secret
+    # tanımlı değilse değer boş string olur ve imza/notarize adımları atlanır.
+    env:
+      APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+      APPLE_CERT_PAROLA: ${{ secrets.APPLE_CERT_PAROLA }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PAROLA: ${{ secrets.APPLE_APP_PAROLA }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
+
+      # ─── APPLE İMZA + NOTARIZATION (secret'lar varsa OTOMATİK devreye girer) ───
+      # emre 2026-08-21 canlı olay: kafe sahibi .dmg'yi açamadı — macOS "Apple,
+      # kötü amaçlı yazılım içermediğini doğrulayamadı" diyor ve macOS 15+'ta
+      # "sağ tık → Aç" bypass'ı KALDIRILDIĞI için kullanıcı Sistem Ayarları'ndan
+      # elle izin vermek zorunda kalıyor. Bu uyarıyı KALDIRAN TEK ŞEY Developer ID
+      # imzası + Apple notarization'dır (ad-hoc imza YETMEZ). Apple Developer
+      # Program üyeliği alınıp aşağıdaki secret'lar tanımlandığı ANDA bu adımlar
+      # kendiliğinden çalışır; secret yoksa ATLANIR ve imzasız akış aynen sürer.
+      #   APPLE_CERT_P12    : Developer ID Application .p12 dosyası (base64)
+      #   APPLE_CERT_PAROLA : .p12 dışa aktarma parolası
+      #   APPLE_ID          : Apple hesabı e-postası
+      #   APPLE_APP_PAROLA  : uygulamaya-özel parola (appleid.apple.com)
+      #   APPLE_TEAM_ID     : 10 karakterlik Team ID
+      - name: Apple imzalama sertifikasini yukle (secret varsa)
+        if: env.APPLE_CERT_P12 != ''
+        run: |
+          ANAHTARLIK="$RUNNER_TEMP/imza.keychain-db"
+          GECICI="$(uuidgen)"
+          security create-keychain -p "$GECICI" "$ANAHTARLIK"
+          security set-keychain-settings -lut 21600 "$ANAHTARLIK"
+          security unlock-keychain -p "$GECICI" "$ANAHTARLIK"
+          echo "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/sertifika.p12"
+          security import "$RUNNER_TEMP/sertifika.p12" -k "$ANAHTARLIK" -P "$APPLE_CERT_PAROLA" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$GECICI" "$ANAHTARLIK" > /dev/null
+          security list-keychain -d user -s "$ANAHTARLIK" login.keychain-db
+          rm -f "$RUNNER_TEMP/sertifika.p12"
+          KIMLIK="$(security find-identity -v -p codesigning "$ANAHTARLIK" | grep 'Developer ID Application' | head -1 | cut -d'"' -f2)"
+          echo "IMZA_KIMLIGI=$KIMLIK" >> "$GITHUB_ENV"
+          echo "Imza kimligi: $KIMLIK"
 
       - name: Darwin ikililerini derle (amd64 + arm64, CGO_ENABLED=1)
         env:
@@ -105,6 +144,19 @@ jobs:
           DMG_ADI: HizmetraYazici.dmg
         run: bash packaging/macos/paket.sh "${GITHUB_REF_NAME#v}"
 
+      # DMG_ADI notarize adiminda da lazim.
+      - run: echo "DMG_ADI=HizmetraYazici.dmg" >> "$GITHUB_ENV"
+
+      - name: Notarize + staple (secret varsa)
+        if: env.APPLE_ID != ''
+        run: |
+          DMG="dist-macos/$DMG_ADI"
+          # --wait: Apple taraması bitene kadar bekle (genelde 1-5 dk).
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_APP_PAROLA" --team-id "$APPLE_TEAM_ID" --wait
+          # staple: bileti .dmg'ye GÖMER — kullanıcı çevrimdışıyken de uyarısız açılır.
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+
       - name: DMG'yi release'e yükle
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -129,11 +181,50 @@ jobs:
     name: Eski macOS ikilisi + .dmg (Go 1.20 — 10.13/10.14)
     needs: goreleaser
     runs-on: macos-latest
+    # Apple secret'ları JOB seviyesinde: adım-seviyesi env, o adımın KENDİ
+    # `if` koşulunda görünmez (if, env kurulmadan önce değerlendirilir). Secret
+    # tanımlı değilse değer boş string olur ve imza/notarize adımları atlanır.
+    env:
+      APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+      APPLE_CERT_PAROLA: ${{ secrets.APPLE_CERT_PAROLA }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PAROLA: ${{ secrets.APPLE_APP_PAROLA }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.20"
+
+      # ─── APPLE İMZA + NOTARIZATION (secret'lar varsa OTOMATİK devreye girer) ───
+      # emre 2026-08-21 canlı olay: kafe sahibi .dmg'yi açamadı — macOS "Apple,
+      # kötü amaçlı yazılım içermediğini doğrulayamadı" diyor ve macOS 15+'ta
+      # "sağ tık → Aç" bypass'ı KALDIRILDIĞI için kullanıcı Sistem Ayarları'ndan
+      # elle izin vermek zorunda kalıyor. Bu uyarıyı KALDIRAN TEK ŞEY Developer ID
+      # imzası + Apple notarization'dır (ad-hoc imza YETMEZ). Apple Developer
+      # Program üyeliği alınıp aşağıdaki secret'lar tanımlandığı ANDA bu adımlar
+      # kendiliğinden çalışır; secret yoksa ATLANIR ve imzasız akış aynen sürer.
+      #   APPLE_CERT_P12    : Developer ID Application .p12 dosyası (base64)
+      #   APPLE_CERT_PAROLA : .p12 dışa aktarma parolası
+      #   APPLE_ID          : Apple hesabı e-postası
+      #   APPLE_APP_PAROLA  : uygulamaya-özel parola (appleid.apple.com)
+      #   APPLE_TEAM_ID     : 10 karakterlik Team ID
+      - name: Apple imzalama sertifikasini yukle (secret varsa)
+        if: env.APPLE_CERT_P12 != ''
+        run: |
+          ANAHTARLIK="$RUNNER_TEMP/imza.keychain-db"
+          GECICI="$(uuidgen)"
+          security create-keychain -p "$GECICI" "$ANAHTARLIK"
+          security set-keychain-settings -lut 21600 "$ANAHTARLIK"
+          security unlock-keychain -p "$GECICI" "$ANAHTARLIK"
+          echo "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/sertifika.p12"
+          security import "$RUNNER_TEMP/sertifika.p12" -k "$ANAHTARLIK" -P "$APPLE_CERT_PAROLA" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$GECICI" "$ANAHTARLIK" > /dev/null
+          security list-keychain -d user -s "$ANAHTARLIK" login.keychain-db
+          rm -f "$RUNNER_TEMP/sertifika.p12"
+          KIMLIK="$(security find-identity -v -p codesigning "$ANAHTARLIK" | grep 'Developer ID Application' | head -1 | cut -d'"' -f2)"
+          echo "IMZA_KIMLIGI=$KIMLIK" >> "$GITHUB_ENV"
+          echo "Imza kimligi: $KIMLIK"
 
       - name: Eski-macOS ikilisini derle (amd64, Go 1.20, hedef 10.13)
         env:
@@ -156,6 +247,18 @@ jobs:
           DMG_ADI: HizmetraYazici-EskiMac.dmg
         # 3. argüman (arm64 ikilisi) BİLEREK verilmiyor → Intel-only paket.
         run: bash packaging/macos/paket.sh "${GITHUB_REF_NAME#v}" hizmetra-kopru-eski_darwin_amd64
+
+      - run: echo "DMG_ADI=HizmetraYazici-EskiMac.dmg" >> "$GITHUB_ENV"
+
+      - name: Notarize + staple (secret varsa)
+        if: env.APPLE_ID != ''
+        run: |
+          DMG="dist-macos/$DMG_ADI"
+          # --wait: Apple taraması bitene kadar bekle (genelde 1-5 dk).
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_APP_PAROLA" --team-id "$APPLE_TEAM_ID" --wait
+          # staple: bileti .dmg'ye GÖMER — kullanıcı çevrimdışıyken de uyarısız açılır.
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
 
       - name: Eski-macOS ikilisini ve DMG'yi release'e yükle
         env:

@@ -71,6 +71,25 @@ func main() {
 	gunluk.Baslat(dizin)
 	defer gunluk.Kapat()
 
+	// .dmg İÇİNDEN çalıştırma kontrolü (macOS; diğer platformlarda no-op).
+	// Kullanıcı disk imajını açıp uygulamayı Applications'a SÜRÜKLEMEDEN
+	// çalıştırırsa: imaj çıkarılınca uygulama kaybolur ve otomatik başlatma
+	// kaydı geçici /Volumes/... yolunu işaret ettiği için makine yeniden
+	// başladığında ajan HİÇ açılmaz (fişler sessizce basılmaz). Sessizce
+	// çalışmak yerine ne yapılacağını söyleyip çık.
+	if dmgIcindenCalisiyor() {
+		gunluk.Yaz("uygulama .dmg içinden çalıştırıldı — Uygulamalar'a taşınması gerekiyor")
+		_ = zenity.Error(
+			`Hizmetra Yazıcı şu an disk imajının (DMG) içinden çalıştırıldı.
+
+Lütfen önce uygulamayı "Uygulamalar" (Applications) klasörüne SÜRÜKLEYİN, sonra oradan açın.
+
+Aksi halde disk imajını çıkardığınızda uygulama kaybolur ve bilgisayar yeniden başladığında fişler otomatik basılmaz.`,
+			zenity.Title("Hizmetra Yazıcı — önce Uygulamalar'a taşıyın"),
+		)
+		return
+	}
+
 	// Aynı PC'de İKİ KOPYA çalışırsa aynı fiş iki kez basılabilir → tek kopya kilidi.
 	// v0.4.0: kilit tutuluysa artık SORU SORULMAZ (eski "zaten çalışıyor,
 	// Güncelle/Onar/Kaldır?" zenity akışı Inno Setup installer'a devredildi —

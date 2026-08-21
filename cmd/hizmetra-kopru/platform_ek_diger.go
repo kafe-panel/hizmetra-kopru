@@ -42,3 +42,6 @@ func panoOku() string {
 // WebKitGTK cgo bağımlılığı isterdi ve statik ikiliyi bozardı); tepsi döngüsüne
 // bağımlılık yok.
 const uiTrayIcinde = false
+
+// dmgIcindenCalisiyor — macOS'a özgü (disk imajı) kontrol; Linux'ta anlamsız.
+func dmgIcindenCalisiyor() bool { return false }
