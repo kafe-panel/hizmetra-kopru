@@ -95,11 +95,45 @@ func main() {
 	// otomatik açılabilsin (ozet globalleri canlı okur, ajan sonra başlasa da olur).
 	baslatDurumSunucusu()
 
+	// Ctrl+C / kapanma sinyali (konsoldan çalıştırıldıysa).
+	sinyal := make(chan os.Signal, 1)
+	signal.Notify(sinyal, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sinyal
+		systray.Quit()
+	}()
+
+	// ⚠️ AKIŞ SIRASI PLATFORMA GÖRE DEĞİŞİR (2026-08-21).
+	// macOS'ta pencereler (WKWebView/NSWindow) YALNIZ ana iş parçacığında ve
+	// ÇALIŞAN bir AppKit run loop'u varken kurulabilir. O döngüyü systray.Run
+	// başlatır; dolayısıyla kurulum sihirbazı systray.Run'dan ÖNCE çağrılırsa
+	// macOS'ta pencere HİÇ görünmez. Bu yüzden macOS'ta tüm akış onReady
+	// goroutine'ine taşınır (systray onReady'yi ayrı goroutine'de çağırır →
+	// tepsi donmaz). Windows/Linux'ta sıra AYNEN korunur.
+	if uiTrayIcinde {
+		systray.Run(func() {
+			trayHazir()
+			if !akisiBaslat() {
+				systray.Quit()
+			}
+		}, trayBitti)
+		return
+	}
+
+	if !akisiBaslat() {
+		return
+	}
+	systray.Run(trayHazir, trayBitti)
+}
+
+// akisiBaslat — kurulum (gerekiyorsa) + ajan döngüleri + açılış penceresi.
+// false → kullanıcı kurulumdan vazgeçti, süreç kapanmalı.
+func akisiBaslat() bool {
 	// Token yoksa ilk kurulum: kullanıcıdan 6 haneli kodu iste.
 	if istemci.Token == "" {
 		if ilkKurulum() == kurulumIptal {
 			gunluk.Yaz("kurulum tamamlanmadı, çıkılıyor")
-			return
+			return false
 		}
 	}
 
@@ -122,16 +156,7 @@ func main() {
 	if !bayrakVar("--autostart") {
 		go durumPenceresiniAc()
 	}
-
-	// Ctrl+C / kapanma sinyali (konsoldan çalıştırıldıysa).
-	sinyal := make(chan os.Signal, 1)
-	signal.Notify(sinyal, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sinyal
-		systray.Quit()
-	}()
-
-	systray.Run(trayHazir, trayBitti)
+	return true
 }
 
 // kurulumSonuc — ilkKurulum'un çıktısı.

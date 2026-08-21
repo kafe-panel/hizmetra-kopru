@@ -37,3 +37,8 @@ func panoOku() string {
 	}
 	return ""
 }
+
+// uiTrayIcinde — Linux'ta arayüz sistem tarayıcısında açılır (native pencere
+// WebKitGTK cgo bağımlılığı isterdi ve statik ikiliyi bozardı); tepsi döngüsüne
+// bağımlılık yok.
+const uiTrayIcinde = false

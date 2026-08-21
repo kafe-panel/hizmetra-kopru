@@ -55,3 +55,8 @@ func panoOku() string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// uiTrayIcinde — Windows'ta pencere KENDİ iş parçacığında kendi mesaj döngüsünü
+// çalıştırır (bkz. internal/pencere/pencere_windows.go), tepsi döngüsüne bağlı
+// değildir; akış sırası değişmez.
+const uiTrayIcinde = false
