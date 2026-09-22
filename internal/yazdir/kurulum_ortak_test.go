@@ -123,3 +123,46 @@ func TestKucukHarfTurkceTuzagi(t *testing.T) {
 		t.Error("ASCII 'I' Türkçe 'ı'ya çevrilmemeli — port karşılaştırması bozulur")
 	}
 }
+
+// Sahada iki yazıcı için de kayıt defterinde "UnknownPrinter" yazıyordu ve
+// kullanıcı "UnknownPrinter" / "UnknownPrinter 2" kartları gördü — hiçbir şey
+// anlatmayan, ayırt edilemeyen isimler.
+func TestDonanimdanAdAnlamsizYerTutuculariAtar(t *testing.T) {
+	for _, g := range []string{
+		"UnknownPrinter", "unknownprinter", "UNKNOWNPRINTER",
+		"Unknown", "Printer", "USBPrinter", "LocalPrint", "Generic", "DOT4PRT",
+	} {
+		if got := DonanimdanAd(g); got != "Fiş Yazıcısı" {
+			t.Errorf("DonanimdanAd(%q) = %q, 'Fiş Yazıcısı' beklenir", g, got)
+		}
+	}
+}
+
+// Gerçek model adları YER TUTUCU SANILMAMALI.
+func TestDonanimdanAdGercekModelleriKorur(t *testing.T) {
+	for girdi, bekler := range map[string]string{
+		"ZiJiangZJ-80D6E4": "ZiJiangZJ-80",
+		"Zjiang_POS-80":    "Zjiang POS-80",
+		"POS-80":           "POS-80",
+		"GenericPOS-58":    "GenericPOS-58", // "generic" ile BAŞLIYOR ama eşit değil
+	} {
+		if got := DonanimdanAd(girdi); got != bekler {
+			t.Errorf("DonanimdanAd(%q) = %q, beklenen %q", girdi, got, bekler)
+		}
+	}
+}
+
+// İki yer tutucu yan yana gelince adlar yine ÇAKIŞMAMALI.
+func TestIkiAnlamsizYaziciAyriAdAlir(t *testing.T) {
+	canli := map[string]string{"USB001": "UnknownPrinter", "USB002": "UnknownPrinter"}
+	got := KurulabilirleriBul(canli, true, map[string]YaziciDurumu{})
+	if len(got) != 2 {
+		t.Fatalf("2 bekleniyordu, %d geldi", len(got))
+	}
+	if got[0].OnerilenAd == got[1].OnerilenAd {
+		t.Fatalf("adlar çakıştı: %q", got[0].OnerilenAd)
+	}
+	if got[0].OnerilenAd != "Fiş Yazıcısı" {
+		t.Errorf("ilki 'Fiş Yazıcısı' olmalı, %q geldi", got[0].OnerilenAd)
+	}
+}

@@ -3,6 +3,7 @@
 package yazdir
 
 import (
+	"errors"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -56,6 +57,28 @@ func usbPortlariOkuPlatform() (map[string]string, bool) {
 			continue
 		}
 		for _, ornek := range ornekler {
+			// CİHAZ ŞU AN TAKILI MI? (2026-09-22)
+			//
+			// Windows, USB yazıcı çıkarıldığında Enum kaydını SİLMEZ — kayıt
+			// yıllarca durur. Eskiden kaydın varlığını "takılı" saymıştık ve
+			// hiç yazıcı takılmamış bir bilgisayarda İKİ tane "takılı yazıcı
+			// bulundu" kartı çıktı (sahada görüldü). Ayrıca ölü port teşhisi
+			// de bu kümeye bakıyor; hayalet kayıtlar onu da yanıltır.
+			//
+			// "Control" alt anahtarı UÇUCUDUR: yalnız cihaz başlatılmışken
+			// (gerçekten takılı ve sürücüsü çalışırken) vardır. Yokluğu
+			// KESİN "takılı değil" demektir.
+			ck, err := registry.OpenKey(dk, ornek+`\Control`, registry.READ|registry.WOW64_64KEY)
+			if err != nil {
+				if !errors.Is(err, registry.ErrNotExist) {
+					// Okuyamadık — "takılı değil" DİYEMEYİZ. Kümeyi eksik
+					// işaretle; çağıran her iki özelliği de susturur.
+					tam = false
+				}
+				continue
+			}
+			ck.Close()
+
 			pk, err := registry.OpenKey(dk, ornek+`\Device Parameters`, registry.READ|registry.WOW64_64KEY)
 			if err != nil {
 				tam = false
