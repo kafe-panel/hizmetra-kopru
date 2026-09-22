@@ -241,6 +241,26 @@
     margin-bottom: 14px;
     box-shadow: var(--golge);
   }
+  /* Takılı ama kurulmamış yazıcı şeridi. Kırmızı DEĞİL: bu bir arıza değil,
+     yapılacak tek bir iş. Kafe sahibi paniklememeli, düğmeye basmalı. */
+  .kurulum-serit {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: color-mix(in srgb, var(--teal) 10%, var(--yuzey));
+    border: 1px solid color-mix(in srgb, var(--teal) 45%, var(--cizgi));
+    border-radius: 12px;
+    padding: 11px 14px;
+    margin-bottom: 14px;
+    box-shadow: var(--golge);
+  }
+  .kurulum-metin { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 260px; }
+  .kurulum-baslik { font-size: 14px; font-weight: 650; color: var(--teal); letter-spacing: -.01em; }
+  .kurulum-cumle { font-size: 13px; color: var(--metin); overflow-wrap: anywhere; }
+  .kurulum-alt { font-size: 11.5px; color: var(--metin-3); }
+  .kurulum-dugme {
+    border: 0; border-radius: 9px; padding: 8px 16px; cursor: pointer;
+    background: var(--teal); color: #fff; font-size: 13px; font-weight: 600;
+  }
+  .kurulum-dugme[disabled] { opacity: .6; cursor: default; }
   .sorun-metin { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 260px; }
   .sorun-baslik { font-size: 14px; font-weight: 650; color: var(--kirmizi); letter-spacing: -.01em; }
   .sorun-cumle { font-size: 13px; color: var(--metin); overflow-wrap: anywhere; }
@@ -312,6 +332,8 @@
       </div>
       <button class="guncelle-dugme" id="guncelleDugme" type="button">Güncelle</button>
     </div>
+
+    <div id="kurulumSerit"></div>
 
     <div class="sorun-serit" id="sorunSerit" style="display:none">
       <div class="sorun-metin">
@@ -407,6 +429,82 @@ function fisSatirYap(satir) {
          '</span><span class="fis-mesaj">' + kacis(mesaj) + '</span></div>';
 }
 
+// KURULMAMIŞ YAZICI ŞERİDİ.
+//
+// Kafe sahibi USB kablosunu takar ve Windows sürücüyü tanımazsa cihaz hiçbir
+// yerde yazıcı olarak görünmez. Burada onu ADIYLA gösterip TEK düğme veriyoruz.
+// textContent kullanılır (innerHTML DEĞİL): ad kayıt defterinden gelir.
+//
+// kurulumMesgul — aynı porta arka arkaya iki kurulum gitmesin; kullanıcı
+// düğmeye iki kez basarsa ikinci istek "zaten var" hatası üretirdi.
+var kurulumMesgul = false;
+
+function kurulumSeridiniCiz(liste) {
+  var kap = document.getElementById("kurulumSerit");
+  if (!kap) return;
+  if (!liste.length) { kap.textContent = ""; return; }
+  // Meşgulken YENİDEN ÇİZMİYORUZ: 3 saniyelik yenileme, kullanıcının bastığı
+  // düğmeyi altından çekip "hiçbir şey olmadı" hissi yaratırdı.
+  if (kurulumMesgul) return;
+
+  kap.textContent = "";
+  liste.forEach(function (y) {
+    var serit = document.createElement("div");
+    serit.className = "kurulum-serit";
+
+    var metin = document.createElement("div");
+    metin.className = "kurulum-metin";
+    var bas = document.createElement("div");
+    bas.className = "kurulum-baslik";
+    bas.textContent = "Takılı bir yazıcı bulundu";
+    var cumle = document.createElement("div");
+    cumle.className = "kurulum-cumle";
+    cumle.textContent = y.ad + " — bu bilgisayara bağlı ama Windows'a henüz kurulmamış.";
+    var alt = document.createElement("div");
+    alt.className = "kurulum-alt";
+    alt.textContent = y.port + " girişi · kurduktan sonra panelden seçebilirsiniz";
+    metin.appendChild(bas); metin.appendChild(cumle); metin.appendChild(alt);
+
+    var dugme = document.createElement("button");
+    dugme.className = "kurulum-dugme";
+    dugme.type = "button";
+    dugme.textContent = "Kur";
+    dugme.addEventListener("click", function () {
+      kurulumMesgul = true;
+      dugme.disabled = true;
+      dugme.textContent = "Kuruluyor…";
+      fetch("/yazici-kur?t=" + TOKEN, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ad: y.ad, port: y.port })
+      }).then(function (c) {
+        if (c.ok) {
+          dugme.textContent = "Kuruldu ✓";
+          alt.textContent = "Panelde Yazıcılar → Yeni Yazıcı'dan seçebilirsiniz.";
+          return;
+        }
+        return c.text().then(function (m) {
+          dugme.disabled = false;
+          dugme.textContent = "Kur";
+          alt.textContent = (m || "Kurulamadı").trim();
+        });
+      }).catch(function () {
+        dugme.disabled = false;
+        dugme.textContent = "Kur";
+        alt.textContent = "Kurulamadı — programı kapatıp yeniden açmayı deneyin.";
+      }).then(function () {
+        kurulumMesgul = false;
+      });
+    });
+
+    var kutu = document.createElement("div");
+    kutu.appendChild(dugme);
+    serit.appendChild(metin);
+    serit.appendChild(kutu);
+    kap.appendChild(serit);
+  });
+}
+
 function ciz(v) {
   const oz = (v && v.ozet) || {};
   const gunluk = (v && v.gunluk) || [];
@@ -494,6 +592,8 @@ function ciz(v) {
   // gösterilir. Tek cümle + TEK eylem düğmesi (onarim_eylemi'ne göre).
   const sSerit = document.getElementById("sorunSerit");
   sonEylemID = oz.eylem_id || "";
+  kurulumSeridiniCiz(oz.kurulabilir_yazicilar || []);
+
   if (oz.baski_sorunu) {
     document.getElementById("sorunCumle").textContent = oz.baski_sorunu;
     const onarD = document.getElementById("onarDugme");
