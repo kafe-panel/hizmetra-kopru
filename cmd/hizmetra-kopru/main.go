@@ -789,8 +789,20 @@ func ozetTopla() durumsrv.Ozet {
 
 // kurulabilirYazicilar — kablosu takılı ama Windows'ta kuyruğu olmayan
 // yazıcılar. Windows dışında her zaman boş döner.
+// taramaSorunuLoglandi — "USB taraması eksik" uyarısı yalnız DURUM DEĞİŞİNCE
+// yazılır; özet 3 saniyede bir çekildiği için aksi halde günlük dolar.
+var taramaSorunuLoglandi bool
+
 func kurulabilirYazicilar() []durumsrv.KurulabilirYazici {
-	bulunanlar := yazdir.Kurulabilirler()
+	bulunanlar, taramaGuvenilir := yazdir.Kurulabilirler()
+	if !taramaGuvenilir && !taramaSorunuLoglandi {
+		taramaSorunuLoglandi = true
+		gunluk.Yaz("USB yazıcı taraması eksik kaldı — takılı yazıcı kurulum önerileri geçici olarak kapalı")
+	}
+	if taramaGuvenilir && taramaSorunuLoglandi {
+		taramaSorunuLoglandi = false
+		gunluk.Yaz("USB yazıcı taraması düzeldi")
+	}
 	if len(bulunanlar) == 0 {
 		return nil
 	}

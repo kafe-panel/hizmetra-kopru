@@ -3,7 +3,10 @@
 package yazdir
 
 import (
-	"errors"
+	"syscall"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -57,27 +60,31 @@ func usbPortlariOkuPlatform() (map[string]string, bool) {
 			continue
 		}
 		for _, ornek := range ornekler {
-			// CİHAZ ŞU AN TAKILI MI? (2026-09-22)
+			// CİHAZ ŞU AN TAKILI MI? (2026-09-22, ikinci deneme)
 			//
 			// Windows, USB yazıcı çıkarıldığında Enum kaydını SİLMEZ — kayıt
-			// yıllarca durur. Eskiden kaydın varlığını "takılı" saymıştık ve
-			// hiç yazıcı takılmamış bir bilgisayarda İKİ tane "takılı yazıcı
-			// bulundu" kartı çıktı (sahada görüldü). Ayrıca ölü port teşhisi
-			// de bu kümeye bakıyor; hayalet kayıtlar onu da yanıltır.
+			// yıllarca durur. Kaydın varlığını "takılı" saymak, hiç yazıcı
+			// olmayan bilgisayarda hayalet "Kur" kartları üretti.
 			//
-			// "Control" alt anahtarı UÇUCUDUR: yalnız cihaz başlatılmışken
-			// (gerçekten takılı ve sürücüsü çalışırken) vardır. Yokluğu
-			// KESİN "takılı değil" demektir.
-			ck, err := registry.OpenKey(dk, ornek+`\Control`, registry.READ|registry.WOW64_64KEY)
-			if err != nil {
-				if !errors.Is(err, registry.ErrNotExist) {
-					// Okuyamadık — "takılı değil" DİYEMEYİZ. Kümeyi eksik
-					// işaretle; çağıran her iki özelliği de susturur.
-					tam = false
-				}
+			// İLK deneme uçucu "Control" alt anahtarına bakıyordu; o anahtar
+			// bazı kurulumlarda normal kullanıcıya KAPALI çıktı ve kod
+			// "emin değilim" deyip HER ŞEYİ susturdu — GERÇEKTEN takılı
+			// yazıcı için bile kart çıkmadı (saha: DESKTOP-UNH2P0F, v0.15.2,
+			// bulunan_yazicilar=[] ve kart yok).
+			//
+			// Doğru araç CM_Locate_DevNodeW: Windows'un "bu cihaz ŞU AN
+			// takılı mı" sorusunun resmî cevabı. Yönetici yetkisi gerektirmez,
+			// kayıt defteri ACL'lerinden etkilenmez. CR_NO_SUCH_DEVNODE =
+			// kesin "takılı değil"; başka her cevap belirsizdir ve küme
+			// eksik işaretlenir (kapalı başarısızlık korunur).
+			takili, kesin := cihazTakiliMi(`USBPRINT\` + donanim + `\` + ornek)
+			if !kesin {
+				tam = false
 				continue
 			}
-			ck.Close()
+			if !takili {
+				continue
+			}
 
 			pk, err := registry.OpenKey(dk, ornek+`\Device Parameters`, registry.READ|registry.WOW64_64KEY)
 			if err != nil {
@@ -97,4 +104,45 @@ func usbPortlariOkuPlatform() (map[string]string, bool) {
 		dk.Close()
 	}
 	return out, tam
+}
+
+// ── CM_Locate_DevNodeW — cihaz ŞU AN takılı mı? ────────────────────────────
+//
+// cfgmgr32, Tak-Çalıştır yöneticisinin kullanıcı-modu yüzüdür; Aygıt
+// Yöneticisi de aynı soruyu böyle sorar. CM_LOCATE_DEVNODE_NORMAL yalnız
+// ŞU AN VAR OLAN (takılı + başlatılmış) düğümleri bulur.
+
+var (
+	cfgmgrDLL          = syscall.NewLazyDLL("cfgmgr32.dll")
+	procLocateDevNodeW = cfgmgrDLL.NewProc("CM_Locate_DevNodeW")
+)
+
+const (
+	crBasarili      = 0x00 // CR_SUCCESS
+	crDugumYok      = 0x0D // CR_NO_SUCH_DEVNODE — cihaz şu an takılı değil
+	locateDevNormal = 0x00 // CM_LOCATE_DEVNODE_NORMAL
+)
+
+// cihazTakiliMi — kimlik "USBPRINT\<donanım>\<örnek>" biçimindedir.
+// kesin=false → cevap belirsiz (DLL yüklenemedi, beklenmedik CR kodu);
+// çağıran kümeyi eksik işaretlemeli, ASLA "takılı değil" varsaymamalı.
+func cihazTakiliMi(kimlik string) (takili, kesin bool) {
+	u, err := windows.UTF16PtrFromString(kimlik)
+	if err != nil {
+		return false, true // NUL'lu kimlik gerçek bir cihaz olamaz
+	}
+	var dugum uint32
+	r, _, _ := procLocateDevNodeW.Call(
+		uintptr(unsafe.Pointer(&dugum)),
+		uintptr(unsafe.Pointer(u)),
+		locateDevNormal,
+	)
+	switch r {
+	case crBasarili:
+		return true, true
+	case crDugumYok:
+		return false, true
+	default:
+		return false, false
+	}
 }
