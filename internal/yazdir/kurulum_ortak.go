@@ -92,10 +92,34 @@ func DonanimdanAd(donanim string) string {
 	// Windows kuyruk adlarında YASAK karakterler: \ ve , ve !
 	s = strings.NewReplacer(`\`, " ", ",", " ", "!", " ").Replace(s)
 	s = strings.Join(strings.Fields(s), " ")
-	if s == "" {
+	if s == "" || anlamsizAdMi(s) {
 		return "Fiş Yazıcısı"
 	}
 	return s
+}
+
+// anlamsizAdlar — Windows'un gerçek model adı yerine koyduğu yer tutucular.
+//
+// Sahada görüldü (2026-09-22): iki fiş yazıcısı için de kayıt defterinde
+// "UnknownPrinter" yazıyordu ve kullanıcıya "UnknownPrinter" / "UnknownPrinter 2"
+// diye iki kart gösterildi. 50 yaşında bir kafe sahibine bu hiçbir şey
+// anlatmaz; hangi kartın hangi yazıcı olduğunu da ayırt edemez. Böyle
+// durumlarda "Fiş Yazıcısı" diyoruz — kart zaten altında "USB002 girişi"
+// yazdığı için ayırt etmek mümkün, ve kullanıcı panelden istediği adı verebilir.
+var anlamsizAdlar = []string{
+	"unknownprinter", "unknown", "unknown device", "printer", "usbprinter",
+	"usb printer", "localprint", "local printer", "generic", "default",
+	"dot4prt", "dot4usb", "bilinmeyen",
+}
+
+func anlamsizAdMi(ad string) bool {
+	k := kucukHarf(strings.TrimSpace(ad))
+	for _, a := range anlamsizAdlar {
+		if k == a {
+			return true
+		}
+	}
+	return false
 }
 
 // sondakiSaglamayiAt — "ZiJiangZJ-80D6E4" → "ZiJiangZJ-80".
