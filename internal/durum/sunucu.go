@@ -58,6 +58,20 @@ type Ozet struct {
 	SonOnarim string `json:"son_onarim"`  // "14:32 · Mutfak — baskı sırası yeniden çalıştırıldı"
 	GeriAlKod string `json:"geri_al_kod"` // dolu ise "Geri Al" düğmesi gösterilir
 	GunlukYol string `json:"gunluk_yolu"` // "Günlüğü Aç" düğmesi için (bilgi amaçlı)
+
+	// ── KURULMAMIŞ YAZICI (2026-09-22) ───────────────────────────────────
+	// Kablosu TAKILI ama Windows'ta kuyruğu OLMAYAN yazıcılar. Windows bu
+	// cihazları "Belirtilmemiş" bölümünde bırakır; yazıcı olarak görünmez,
+	// panele hiç düşmez ve kafe sahibinin bunu fark etmesi imkânsızdır.
+	// Sayfa her biri için tek bir "Kur" düğmesi çizer.
+	KurulabilirYazicilar []KurulabilirYazici `json:"kurulabilir_yazicilar,omitempty"`
+}
+
+// KurulabilirYazici — takılı ama kurulmamış bir yazıcının sayfaya taşınan özeti.
+type KurulabilirYazici struct {
+	Ad      string `json:"ad"`      // önerilen kuyruk adı
+	Port    string `json:"port"`    // "USB002"
+	Donanim string `json:"donanim"` // kayıt defteri kimliği (bilgi amaçlı)
 }
 
 // Sunucu — durum penceresi HTTP sunucusu.
@@ -69,12 +83,13 @@ type Sunucu struct {
 	gunluk            func(n int) []string
 	sablon            *template.Template
 	logoURI           template.URL
-	onOdaklan         func() // /odaklan çağrılınca tetiklenir (main.go: pencere.OneGetir())
-	onGuncelle        func() // /guncelle çağrılınca tetiklenir (main.go: guncelle() — indir+kur)
-	onYenidenEslestir func() // /yeniden-eslestir çağrılınca (main.go: token temizle + yeniden başlat)
-	onOnar            func() // /onar çağrılınca (main.go: bekleyen sorunu onarmayı dene)
-	onGeriAl          func() // /geri-al çağrılınca (son onarımı geri al)
-	onGunlukAc        func() // /gunluk-ac çağrılınca (günlük dosyasını aç)
+	onOdaklan         func()                      // /odaklan çağrılınca tetiklenir (main.go: pencere.OneGetir())
+	onGuncelle        func()                      // /guncelle çağrılınca tetiklenir (main.go: guncelle() — indir+kur)
+	onYenidenEslestir func()                      // /yeniden-eslestir çağrılınca (main.go: token temizle + yeniden başlat)
+	onOnar            func()                      // /onar çağrılınca (main.go: bekleyen sorunu onarmayı dene)
+	onGeriAl          func()                      // /geri-al çağrılınca (son onarımı geri al)
+	onGunlukAc        func()                      // /gunluk-ac çağrılınca (günlük dosyasını aç)
+	onYaziciKur       func(ad, port string) error // /yazici-kur çağrılınca
 }
 
 // OnarAyarla / GeriAlAyarla / GunlukAcAyarla — YenidenEslestirAyarla ile AYNI
@@ -83,6 +98,10 @@ type Sunucu struct {
 func (s *Sunucu) OnarAyarla(fn func())     { s.onOnar = fn }
 func (s *Sunucu) GeriAlAyarla(fn func())   { s.onGeriAl = fn }
 func (s *Sunucu) GunlukAcAyarla(fn func()) { s.onGunlukAc = fn }
+
+// YaziciKurAyarla — sayfadaki "Kur" düğmesi (POST /yazici-kur) tetiklendiğinde
+// çağrılacak işlev. nil bırakılırsa uç 501 döner ve sayfa düğmeyi çizmez.
+func (s *Sunucu) YaziciKurAyarla(fn func(ad, port string) error) { s.onYaziciKur = fn }
 
 // YenidenEslestirAyarla — kullanıcı durum penceresindeki "Yeniden Eşleştir"
 // butonuna basınca (POST /yeniden-eslestir) tetiklenecek callback'i bağlar
@@ -276,6 +295,53 @@ func (s *Sunucu) Handler() http.Handler {
 	})
 	// /gunluk-ac — günlük dosyasını işletim sisteminin varsayılan uygulamasında
 	// açar (gunluk.Yolu()). Destek istemek için kullanıcı dosyayı kolayca bulsun.
+	// /yazici-kur — takılı ama kurulmamış yazıcı için Windows kuyruğu açar.
+	//
+	// SENKRON: /onar'ın aksine sonucu kullanıcıya DÖNÜYORUZ. Kurulum saniyeler
+	// sürer ve başarısız olursa kafe sahibinin nedenini görmesi şart; arka plana
+	// atsaydık düğmeye basıp hiçbir şey olmadığını sanırdı.
+	//
+	// Port ve ad SAYFADAN gelir ama İKİSİ DE doğrulanır: sayfa yerel bir
+	// tarayıcı sekmesidir, gövdesine güvenilmez.
+	mux.HandleFunc("/yazici-kur", func(w http.ResponseWriter, r *http.Request) {
+		if !s.yetkili(r) {
+			http.Error(w, "yetkisiz", http.StatusForbidden)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "yalnız POST", http.StatusMethodNotAllowed)
+			return
+		}
+		if s.onYaziciKur == nil {
+			http.Error(w, "bu platformda yazıcı kurulumu yok", http.StatusNotImplemented)
+			return
+		}
+		var govde struct {
+			Ad   string `json:"ad"`
+			Port string `json:"port"`
+		}
+		_ = json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&govde)
+
+		// PORT SAYFADAN GELDİĞİ GİBİ KABUL EDİLMEZ: yalnız o an GERÇEKTEN
+		// kurulabilir olarak listelenen portlardan biri olabilir. Aksi halde
+		// eski bir sekme, artık takılı olmayan bir porta kuyruk açtırabilirdi.
+		gecerli := false
+		for _, k := range s.ozet().KurulabilirYazicilar {
+			if k.Port == govde.Port {
+				gecerli = true
+				break
+			}
+		}
+		if !gecerli {
+			http.Error(w, "bu yazıcı artık takılı görünmüyor", http.StatusConflict)
+			return
+		}
+		if err := s.onYaziciKur(govde.Ad, govde.Port); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 	mux.HandleFunc("/gunluk-ac", func(w http.ResponseWriter, r *http.Request) {
 		if !s.yetkili(r) {
 			http.Error(w, "yetkisiz", http.StatusForbidden)

@@ -672,6 +672,14 @@ func baslatDurumSunucusu() {
 	// "Yeniden Eşleştir" butonu (sayfa.html) confirm()'i sayfada aldığı için
 	// çekirdeği DOĞRUDAN çağırır (tray yolu ayrıca zenity onayı gösterir).
 	s.YenidenEslestirAyarla(func() { yenidenEslestirGovde("durum penceresinden yeniden eşleştir") })
+	s.YaziciKurAyarla(func(ad, port string) error {
+		if err := yazdir.Kur(ad, port); err != nil {
+			gunluk.Yaz("yazıcı kurulamadı (%s @ %s): %v", ad, port, err)
+			return err
+		}
+		gunluk.Yaz("yazıcı kuruldu: %s → %s", ad, port)
+		return nil
+	})
 	s.OnarAyarla(bekleyenSorunuOnar)
 	s.GeriAlAyarla(sonOnarimiGeriAl)
 	s.GunlukAcAyarla(gunluguAc)
@@ -774,7 +782,23 @@ func ozetTopla() durumsrv.Ozet {
 		SonOnarim:    sonOnarimMetni(),
 		GeriAlKod:    geriAlKodu(),
 		GunlukYol:    gunluk.Yolu(),
+
+		KurulabilirYazicilar: kurulabilirYazicilar(),
 	}
+}
+
+// kurulabilirYazicilar — kablosu takılı ama Windows'ta kuyruğu olmayan
+// yazıcılar. Windows dışında her zaman boş döner.
+func kurulabilirYazicilar() []durumsrv.KurulabilirYazici {
+	bulunanlar := yazdir.Kurulabilirler()
+	if len(bulunanlar) == 0 {
+		return nil
+	}
+	out := make([]durumsrv.KurulabilirYazici, 0, len(bulunanlar))
+	for _, k := range bulunanlar {
+		out = append(out, durumsrv.KurulabilirYazici{Ad: k.OnerilenAd, Port: k.Port, Donanim: k.Donanim})
+	}
+	return out
 }
 
 // onarimEylemi — sorun koduna göre durum penceresindeki TEK düğme.

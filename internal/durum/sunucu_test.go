@@ -2,6 +2,7 @@ package durum
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -507,5 +508,94 @@ func TestVeriJsonYeniAlanlariTasir(t *testing.T) {
 		if !strings.Contains(govde, anahtar) {
 			t.Errorf("%q anahtarı /veri.json'da yok", anahtar)
 		}
+	}
+}
+
+// ── /yazici-kur (2026-09-22) ─────────────────────────────────────────────
+
+func kurulumSunucusu(t *testing.T, kurulabilir []KurulabilirYazici, fn func(ad, port string) error) *Sunucu {
+	t.Helper()
+	s := Yeni("Hizmetra Yazıcı", "0.0.0",
+		func() Ozet { return Ozet{Bagli: true, KurulabilirYazicilar: kurulabilir} },
+		func(int) []string { return nil }, nil, nil)
+	s.Token = "tok"
+	if fn != nil {
+		s.YaziciKurAyarla(fn)
+	}
+	return s
+}
+
+func kurIstegi(t *testing.T, s *Sunucu, token, govde string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodPost, "/yazici-kur?t="+token, strings.NewReader(govde))
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, r)
+	return w
+}
+
+func TestYaziciKurMutluYol(t *testing.T) {
+	var gelenAd, gelenPort string
+	s := kurulumSunucusu(t, []KurulabilirYazici{{Ad: "ZJ-80", Port: "USB002"}},
+		func(ad, port string) error { gelenAd, gelenPort = ad, port; return nil })
+
+	w := kurIstegi(t, s, "tok", `{"ad":"ZJ-80","port":"USB002"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("200 bekleniyordu, %d geldi: %s", w.Code, w.Body.String())
+	}
+	if gelenAd != "ZJ-80" || gelenPort != "USB002" {
+		t.Errorf("callback'e yanlış değer gitti: %q @ %q", gelenAd, gelenPort)
+	}
+}
+
+// Listelenmeyen bir porta kurulum YAPILMAMALI: açık kalmış eski bir sekme,
+// artık takılı olmayan bir porta kuyruk açtırabilirdi.
+func TestYaziciKurListeDisiPortuReddeder(t *testing.T) {
+	cagrildi := false
+	s := kurulumSunucusu(t, []KurulabilirYazici{{Ad: "ZJ-80", Port: "USB002"}},
+		func(string, string) error { cagrildi = true; return nil })
+
+	w := kurIstegi(t, s, "tok", `{"ad":"ZJ-80","port":"USB009"}`)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("409 bekleniyordu, %d geldi", w.Code)
+	}
+	if cagrildi {
+		t.Error("liste dışı port için kurulum çağrılmamalıydı")
+	}
+}
+
+func TestYaziciKurYetkiVeYontem(t *testing.T) {
+	s := kurulumSunucusu(t, []KurulabilirYazici{{Ad: "ZJ-80", Port: "USB002"}},
+		func(string, string) error { return nil })
+
+	if w := kurIstegi(t, s, "yanlis", `{"ad":"ZJ-80","port":"USB002"}`); w.Code != http.StatusForbidden {
+		t.Errorf("yanlış token 403 vermeliydi, %d geldi", w.Code)
+	}
+	r := httptest.NewRequest(http.MethodGet, "/yazici-kur?t=tok", nil)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, r)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET 405 vermeliydi, %d geldi", w.Code)
+	}
+}
+
+// Windows dışı: callback bağlı değil → 501, panik yok.
+func TestYaziciKurDesteklenmeyenPlatform(t *testing.T) {
+	s := kurulumSunucusu(t, []KurulabilirYazici{{Ad: "ZJ-80", Port: "USB002"}}, nil)
+	if w := kurIstegi(t, s, "tok", `{"ad":"ZJ-80","port":"USB002"}`); w.Code != http.StatusNotImplemented {
+		t.Errorf("501 bekleniyordu, %d geldi", w.Code)
+	}
+}
+
+// Kurulum hatası kullanıcıya AYNEN dönmeli — düğmeye basıp sessizlik görmesin.
+func TestYaziciKurHatayiKullaniciyaDoner(t *testing.T) {
+	s := kurulumSunucusu(t, []KurulabilirYazici{{Ad: "ZJ-80", Port: "USB002"}},
+		func(string, string) error { return errors.New("yönetici yetkisi gerekiyor") })
+
+	w := kurIstegi(t, s, "tok", `{"ad":"ZJ-80","port":"USB002"}`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("400 bekleniyordu, %d geldi", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "yönetici yetkisi") {
+		t.Errorf("hata metni kullanıcıya dönmeli, gelen: %q", w.Body.String())
 	}
 }
