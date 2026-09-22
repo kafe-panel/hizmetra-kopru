@@ -28,6 +28,18 @@ jobs:
             exit 1
           }
 
+      # ⚠️ GO 1.21+ STDLIB MAYIN TARAMASI (2026-09-22) — bu adım SİLİNMEMELİ.
+      # Eski kanal Go 1.20 ile derleniyor. Yanlışlıkla eklenen bir `slices` /
+      # `maps` / `log/slog` importu modern derlemede YEŞİL geçiyor, sonra tag
+      # anında legacy job'ında patlıyordu. Burada PR'da yakalanır.
+      # (builtin min/max ayrıca legacy-build job'ında yakalanır.)
+      - name: Go 1.21+ stdlib kullanılmamış mı (eski kanal muhafızı)
+        run: |
+          if grep -rnE '"slices"|"maps"|log/slog|math/rand/v2|errors\.ErrUnsupported|"cmp"' --include=*.go .; then
+            echo "HATA: yukaridaki satirlar Go 1.21+ stdlib kullaniyor; eski kanal (Go 1.20) derlemesi patlar."
+            exit 1
+          fi
+
       - run: go vet ./...
       - run: go test ./... -race
 

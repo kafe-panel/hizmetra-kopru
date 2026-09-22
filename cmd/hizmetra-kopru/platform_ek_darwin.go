@@ -87,3 +87,8 @@ func dmgIcindenCalisiyor() bool {
 	}
 	return strings.HasPrefix(exe, "/Volumes/")
 }
+
+// dosyaAc — dosyayı macOS'un varsayılan uygulamasında açar ("Günlüğü Aç").
+func dosyaAc(yol string) error {
+	return exec.Command("open", yol).Start()
+}

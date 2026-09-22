@@ -230,6 +230,38 @@
   .guncelle-dugme:hover { background: var(--teal-2); }
   .guncelle-dugme:disabled { opacity: .6; cursor: default; }
 
+  /* Sorun şeridi — FİŞ BASILAMIYOR uyarısı. guncelle-serit deseninin ikizi,
+     ama durum kartının ÜSTÜNDE ve bağlantı durumundan BAĞIMSIZ çizilir. */
+  .sorun-serit {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: color-mix(in srgb, var(--kirmizi) 10%, var(--yuzey));
+    border: 1px solid color-mix(in srgb, var(--kirmizi) 45%, var(--cizgi));
+    border-radius: 12px;
+    padding: 11px 14px;
+    margin-bottom: 14px;
+    box-shadow: var(--golge);
+  }
+  .sorun-metin { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 260px; }
+  .sorun-baslik { font-size: 14px; font-weight: 650; color: var(--kirmizi); letter-spacing: -.01em; }
+  .sorun-cumle { font-size: 13px; color: var(--metin); overflow-wrap: anywhere; }
+  .sorun-onarim { font-size: 11.5px; color: var(--metin-3); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sorun-dugmeler { display: flex; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; }
+  .sorun-dugme {
+    background: var(--kirmizi); color: #fff;
+    border: 0; cursor: pointer;
+    font-family: inherit; font-weight: 600; font-size: 13.5px;
+    padding: 9px 18px; border-radius: 9px;
+    box-shadow: var(--golge);
+  }
+  .sorun-dugme:disabled { opacity: .6; cursor: default; }
+  .sorun-kucuk {
+    background: transparent; color: var(--metin-2);
+    border: 1px solid var(--cizgi); cursor: pointer;
+    font-family: inherit; font-weight: 600; font-size: 12px;
+    padding: 6px 12px; border-radius: 8px;
+  }
+  .sorun-kucuk:hover { border-color: var(--kirmizi); color: var(--kirmizi); }
+
   /* Alt */
   .alt { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
   .panel-dugme {
@@ -279,6 +311,23 @@
         <div class="guncelle-alt" id="guncelleAlt"></div>
       </div>
       <button class="guncelle-dugme" id="guncelleDugme" type="button">Güncelle</button>
+    </div>
+
+    <div class="sorun-serit" id="sorunSerit" style="display:none">
+      <div class="sorun-metin">
+        <div class="sorun-baslik">Fiş basılamıyor</div>
+        <div class="sorun-cumle" id="sorunCumle"></div>
+        <div class="sorun-onarim" id="sorunOnarim" style="display:none">
+          <span id="sonOnarimMetin"></span>
+          <button class="sorun-kucuk" id="geriAlDugme" type="button" style="display:none">Geri Al</button>
+        </div>
+      </div>
+      <div class="sorun-dugmeler">
+        <button class="sorun-dugme" id="onarDugme" type="button" style="display:none">Onar</button>
+        <a class="sorun-dugme" id="yaziciSecDugme" target="_blank" rel="noopener" style="display:none">Panelden Yazıcı Seç</a>
+        <button class="sorun-kucuk" id="gunlukAcDugme" type="button">Günlüğü Aç</button>
+        <button class="sorun-kucuk" id="hataKopyalaDugme" type="button">Hatayı Kopyala</button>
+      </div>
     </div>
 
     <noscript><div class="uyari">Bu durum penceresi için tarayıcıda JavaScript gerekir.</div></noscript>
@@ -368,7 +417,15 @@ function ciz(v) {
   const alt = document.getElementById("durumAlt");
   nokta.className = "nokta";
   alt.className = "durum-alt";
-  if (oz.bagli) {
+  if (oz.bagli && oz.baski_sorunu) {
+    // ÜÇÜNCÜ HÂL: panel bağlantısı sağlam AMA fiş basılamıyor. Eskiden bu
+    // durumda kart "✓ Bağlı — son fiş 14:32" diyordu ve kullanıcı sorunu
+    // görmüyordu.
+    nokta.classList.add("bekle");
+    baslik.textContent = "Bağlı — fiş basılamıyor";
+    alt.classList.add("hata");
+    alt.textContent = oz.baski_sorunu;
+  } else if (oz.bagli) {
     nokta.classList.add("bagli");
     baslik.textContent = oz.isletme_ad ? ("Bağlı — " + oz.isletme_ad) : "Bağlı";
     const yz = (oz.yazicilar || []).length;
@@ -431,7 +488,75 @@ function ciz(v) {
   } else {
     gSerit.style.display = "none";
   }
+
+  // ── SORUN ŞERİDİ ────────────────────────────────────────────────────────
+  // oz.bagli'den TAMAMEN BAĞIMSIZ: baskı sorunu varsa bağlantı yeşil olsa bile
+  // gösterilir. Tek cümle + TEK eylem düğmesi (onarim_eylemi'ne göre).
+  const sSerit = document.getElementById("sorunSerit");
+  sonEylemID = oz.eylem_id || "";
+  if (oz.baski_sorunu) {
+    document.getElementById("sorunCumle").textContent = oz.baski_sorunu;
+    const onarD = document.getElementById("onarDugme");
+    const secD = document.getElementById("yaziciSecDugme");
+    onarD.style.display = (oz.onarim_eylemi === "ONAR") ? "" : "none";
+    if (oz.onarim_eylemi === "YAZICI_SEC" && v && v.panel_url) {
+      secD.href = v.panel_url;
+      secD.style.display = "";
+    } else {
+      secD.style.display = "none";
+    }
+    const onarimSatir = document.getElementById("sorunOnarim");
+    const geriAlD = document.getElementById("geriAlDugme");
+    if (oz.son_onarim) {
+      document.getElementById("sonOnarimMetin").textContent = "Son onarım: " + oz.son_onarim;
+      onarimSatir.style.display = "";
+      geriAlD.style.display = oz.geri_al_kod ? "" : "none";
+    } else {
+      onarimSatir.style.display = "none";
+    }
+    sSerit.style.display = "";
+  } else {
+    sSerit.style.display = "none";
+  }
 }
+
+// sonEylemID — /onar isteğine konan eylem kimliği. Ajanın O ANKİ bekleyen
+// eylemiyle eşleşmezse sunucu HİÇBİR ŞEY yapmaz (eski sekme koruması).
+let sonEylemID = "";
+
+const onarDugme = document.getElementById("onarDugme");
+onarDugme.addEventListener("click", async function() {
+  onarDugme.disabled = true;
+  onarDugme.textContent = "Onarılıyor…";
+  try {
+    await fetch("/onar?t=" + TOKEN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eylem_id: sonEylemID })
+    });
+  } catch (e) { /* günlükte görünür */ }
+  setTimeout(function() {
+    onarDugme.disabled = false;
+    onarDugme.textContent = "Onar";
+  }, 5000);
+});
+
+document.getElementById("geriAlDugme").addEventListener("click", async function() {
+  try { await fetch("/geri-al?t=" + TOKEN, { method: "POST" }); } catch (e) {}
+});
+
+document.getElementById("gunlukAcDugme").addEventListener("click", async function() {
+  try { await fetch("/gunluk-ac?t=" + TOKEN, { method: "POST" }); } catch (e) {}
+});
+
+document.getElementById("hataKopyalaDugme").addEventListener("click", async function() {
+  const d = document.getElementById("hataKopyalaDugme");
+  try {
+    await navigator.clipboard.writeText(document.getElementById("sorunCumle").textContent || "");
+    d.textContent = "Kopyalandı";
+    setTimeout(function() { d.textContent = "Hatayı Kopyala"; }, 2000);
+  } catch (e) {}
+});
 
 // "Güncelle" → POST /guncelle: sunucu tarafı (Go) installer'ı indirir, çalıştırır
 // ve uygulamadan çıkar; bu sayfa birazdan yanıt vermez olur. İndirme/başlatma

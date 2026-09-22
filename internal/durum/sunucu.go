@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"html/template"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -39,6 +40,24 @@ type Ozet struct {
 	// sayfa bunu görünce "Güncelle" şeridini gösterir (POST /guncelle → indir+kur).
 	GuncelSurum string `json:"guncel_surum"`
 	IndirmeURL  string `json:"indirme_url"`
+
+	// ── BASKI SORUNU (2026-09-22) ────────────────────────────────────────
+	// Bunlar SonHata'dan AYRIDIR: bağlantı sapasağlamken fiş basılamıyor
+	// olabilir. Sayfa bu alanları oz.bagli'den TAMAMEN BAĞIMSIZ bir blokta
+	// çizer — eskiden ciz() önce oz.bagli'ye baktığı için son_hata dalına
+	// HİÇ girilmiyordu ve kullanıcı yeşil kart görüp fişin çıkmadığını fark
+	// etmiyordu.
+	BaskiSorunu string `json:"baski_sorunu"` // tek cümlelik Türkçe açıklama
+	BaskiKodu   string `json:"baski_kodu"`   // teshis kodu (makine tarafı)
+	// OnarimEylemi — "ONAR" | "YAZICI_SEC" | "YOK" (tek düğme seçimi)
+	OnarimEylemi string `json:"onarim_eylemi"`
+	// EylemID — o anki BEKLEYEN eylemin kimliği. /onar isteği bununla
+	// eşleşmezse HİÇBİR ŞEY yapılmaz (yerel tarayıcı sekmesi token'ı
+	// görebilir; eski bir sekmenin yanlışlıkla onarım tetiklemesi engellenir).
+	EylemID   string `json:"eylem_id"`
+	SonOnarim string `json:"son_onarim"`  // "14:32 · Mutfak — baskı sırası yeniden çalıştırıldı"
+	GeriAlKod string `json:"geri_al_kod"` // dolu ise "Geri Al" düğmesi gösterilir
+	GunlukYol string `json:"gunluk_yolu"` // "Günlüğü Aç" düğmesi için (bilgi amaçlı)
 }
 
 // Sunucu — durum penceresi HTTP sunucusu.
@@ -53,7 +72,17 @@ type Sunucu struct {
 	onOdaklan         func() // /odaklan çağrılınca tetiklenir (main.go: pencere.OneGetir())
 	onGuncelle        func() // /guncelle çağrılınca tetiklenir (main.go: guncelle() — indir+kur)
 	onYenidenEslestir func() // /yeniden-eslestir çağrılınca (main.go: token temizle + yeniden başlat)
+	onOnar            func() // /onar çağrılınca (main.go: bekleyen sorunu onarmayı dene)
+	onGeriAl          func() // /geri-al çağrılınca (son onarımı geri al)
+	onGunlukAc        func() // /gunluk-ac çağrılınca (günlük dosyasını aç)
 }
+
+// OnarAyarla / GeriAlAyarla / GunlukAcAyarla — YenidenEslestirAyarla ile AYNI
+// desen: Yeni()'nin imzasını büyütüp mevcut çağrıları (main.go + testler)
+// kırmamak için ayrı setter'lar. nil bırakılırsa ilgili uç yalnız 200 döner.
+func (s *Sunucu) OnarAyarla(fn func())     { s.onOnar = fn }
+func (s *Sunucu) GeriAlAyarla(fn func())   { s.onGeriAl = fn }
+func (s *Sunucu) GunlukAcAyarla(fn func()) { s.onGunlukAc = fn }
 
 // YenidenEslestirAyarla — kullanıcı durum penceresindeki "Yeniden Eşleştir"
 // butonuna basınca (POST /yeniden-eslestir) tetiklenecek callback'i bağlar
@@ -199,6 +228,65 @@ func (s *Sunucu) Handler() http.Handler {
 		}
 		if s.onYenidenEslestir != nil {
 			go s.onYenidenEslestir()
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	// /onar — kullanıcı sorun şeridindeki "Onar" düğmesine bastı. /guncelle ile
+	// AYNI güvenlik deseni (token + yalnız POST + asenkron callback) ARTI
+	// EYLEM KİMLİĞİ DOĞRULAMASI: gövdedeki eylem_id ajanın O ANKİ bekleyen
+	// eylemiyle eşleşmezse HİÇBİR ŞEY yapılmaz. Böylece açık kalmış eski bir
+	// sekme, çoktan geçmiş bir sorunu "onarmaya" kalkamaz.
+	mux.HandleFunc("/onar", func(w http.ResponseWriter, r *http.Request) {
+		if !s.yetkili(r) {
+			http.Error(w, "yetkisiz", http.StatusForbidden)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "yalnız POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var govde struct {
+			EylemID string `json:"eylem_id"`
+		}
+		_ = json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&govde)
+		bekleyen := s.ozet().EylemID
+		if bekleyen == "" || govde.EylemID != bekleyen {
+			http.Error(w, "eylem güncel değil", http.StatusConflict)
+			return
+		}
+		if s.onOnar != nil {
+			go s.onOnar()
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	// /geri-al — son onarımı geri alır (defterdeki eski değer yazılır).
+	mux.HandleFunc("/geri-al", func(w http.ResponseWriter, r *http.Request) {
+		if !s.yetkili(r) {
+			http.Error(w, "yetkisiz", http.StatusForbidden)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "yalnız POST", http.StatusMethodNotAllowed)
+			return
+		}
+		if s.onGeriAl != nil {
+			go s.onGeriAl()
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	// /gunluk-ac — günlük dosyasını işletim sisteminin varsayılan uygulamasında
+	// açar (gunluk.Yolu()). Destek istemek için kullanıcı dosyayı kolayca bulsun.
+	mux.HandleFunc("/gunluk-ac", func(w http.ResponseWriter, r *http.Request) {
+		if !s.yetkili(r) {
+			http.Error(w, "yetkisiz", http.StatusForbidden)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "yalnız POST", http.StatusMethodNotAllowed)
+			return
+		}
+		if s.onGunlukAc != nil {
+			go s.onGunlukAc()
 		}
 		w.WriteHeader(http.StatusOK)
 	})

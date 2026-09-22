@@ -63,3 +63,10 @@ const uiTrayIcinde = false
 
 // dmgIcindenCalisiyor — macOS'a özgü (disk imajı) kontrol; Windows'ta anlamsız.
 func dmgIcindenCalisiyor() bool { return false }
+
+// dosyaAc — dosyayı Windows'un varsayılan uygulamasında açar (tepsi ve durum
+// penceresindeki "Günlüğü Aç"). gizliKomut kullanılır ki siyah konsol penceresi
+// çakmasın (ajan -H windowsgui ile derleniyor, kendi konsolu yok).
+func dosyaAc(yol string) error {
+	return gizliKomut("rundll32", "url.dll,FileProtocolHandler", yol).Start()
+}

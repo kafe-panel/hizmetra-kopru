@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kafe-panel/hizmetra-kopru/internal/api"
+	"github.com/kafe-panel/hizmetra-kopru/internal/yazdir"
 )
 
 // bulPlatform — macOS/Linux'ta CUPS'a kayıtlı yazıcı kuyruklarını listeler.
@@ -25,7 +26,27 @@ func bulPlatform() ([]api.Yazici, error) {
 	if err != nil {
 		return []api.Yazici{}, nil // cupsd kapalı vb. — keşif atlanır (hata DEĞİL)
 	}
-	return ayristirLpstat(string(cikti)), nil
+	return birlestirDurumlar(ayristirLpstat(string(cikti))), nil
+}
+
+// birlestirDurumlar — `lpstat -e` ad listesine, paylaşımlı kuyruk
+// önbelleğinden (yazdir) GERÇEK durumu ekler. Ad listesi `lpstat -e`den gelir
+// (ayrıştırması sağlam), durum `lpstat -p`den.
+func birlestirDurumlar(yazicilar []api.Yazici) []api.Yazici {
+	durumlar, err := yazdir.YazicilariOku()
+	if err != nil || len(durumlar) == 0 {
+		return yazicilar // durum bilgisi yok → best-effort "online" kalır
+	}
+	for i := range yazicilar {
+		d, varmi := durumlar[yazicilar[i].Ad]
+		if !varmi {
+			continue
+		}
+		durum, uyari := durumBelirle(d)
+		yazicilar[i].Durum = durum
+		yazicilar[i].Uyari = uyari
+	}
+	return yazicilar
 }
 
 // ayristirLpstat — `lpstat -e` çıktısını Yazici listesine çevirir. Saf fonksiyon

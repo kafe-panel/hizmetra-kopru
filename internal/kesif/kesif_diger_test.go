@@ -2,7 +2,11 @@
 
 package kesif
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/kafe-panel/hizmetra-kopru/internal/yazdir"
+)
 
 // TestAyristirLpstat — `lpstat -e` çıktısı Yazici listesine doğru çevrilmeli.
 // Windows'ta derlenmez (build tag); linux CI'da `go test ./...` ile koşar.
@@ -38,5 +42,50 @@ func TestAyristirLpstatBos(t *testing.T) {
 	}
 	if len(yzc) != 0 {
 		t.Fatalf("boş liste bekleniyordu, %d geldi", len(yzc))
+	}
+}
+
+// TestDurumBelirle — SABİT "online" yalanı bitti: çevrimdışı işaretli / devre
+// dışı kuyruk "offline", normal kuyruk "online" olmalı.
+func TestDurumBelirle(t *testing.T) {
+	if d, _ := durumBelirle(yazdir.YaziciDurumu{Ad: "Mutfak", Duraklatildi: true}); d != DurumCevrimdisi {
+		t.Errorf("devre dışı kuyruk offline olmalı, %q geldi", d)
+	}
+	if d, _ := durumBelirle(yazdir.YaziciDurumu{Ad: "Kasa", CevrimdisiIsaretli: true}); d != DurumCevrimdisi {
+		t.Errorf("çevrimdışı işaretli yazıcı offline olmalı, %q geldi", d)
+	}
+	if d, _ := durumBelirle(yazdir.YaziciDurumu{Ad: "Bar", Port: "USB001"}); d != DurumCevrimici {
+		t.Errorf("normal kuyruk online olmalı, %q geldi", d)
+	}
+	// Sanal/dosya portu kağıt çıkarmaz → offline + uyarı.
+	d, uyari := durumBelirle(yazdir.YaziciDurumu{Ad: "XPS", Port: "PORTPROMPT:"})
+	if d != DurumCevrimdisi || uyari == "" {
+		t.Errorf("sanal hedef offline + uyarılı olmalı: (%q,%q)", d, uyari)
+	}
+}
+
+// TestDurumDegerleriYALNIZIkiTane — PROTOKOL SABİTİ: sunucu bu alanda başka
+// değer beklemiyor. Yeni bir durum değeri eklemek şema değişikliğidir.
+func TestDurumDegerleriYalnizIkiTane(t *testing.T) {
+	gorulen := map[string]bool{}
+	ornekler := []yazdir.YaziciDurumu{
+		{Ad: "a"},
+		{Ad: "b", Duraklatildi: true},
+		{Ad: "c", CevrimdisiIsaretli: true},
+		{Ad: "d", Port: "nul:"},
+		{Ad: "e", Port: "USB001"},
+		{Ad: "f", Port: "IP_192.168.1.50"},
+	}
+	for _, o := range ornekler {
+		d, _ := durumBelirle(o)
+		gorulen[d] = true
+	}
+	for d := range gorulen {
+		if d != DurumCevrimici && d != DurumCevrimdisi {
+			t.Fatalf("beklenmeyen durum değeri: %q", d)
+		}
+	}
+	if len(gorulen) != 2 {
+		t.Fatalf("iki durum değeri bekleniyordu, görülenler: %v", gorulen)
 	}
 }
