@@ -12,3 +12,8 @@ import "errors"
 func kurPlatform(ad, port string) error {
 	return errors.New("yazıcı kurulumu yalnız Windows'ta destekleniyor")
 }
+
+// kurCocukSurecPlatform — Windows dışında yükseltilmiş kurulum yolu yok.
+func kurCocukSurecPlatform(ad, port string) error {
+	return kurPlatform(ad, port)
+}

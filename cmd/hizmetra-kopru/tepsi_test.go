@@ -45,3 +45,24 @@ func TestTepsiDurumMetniDigerHaller(t *testing.T) {
 		t.Errorf("işletme adı öne konmalı: %q", m)
 	}
 }
+
+func TestKurArgleri(t *testing.T) {
+	if ad, port, ok := kurArgleri([]string{"--yazici-kur", "Fiş Yazıcısı", "USB001"}); !ok || ad != "Fiş Yazıcısı" || port != "USB001" {
+		t.Fatalf("beklenen ayıklama olmadı: %q %q %v", ad, port, ok)
+	}
+	// Bayrak başka konumda da bulunmalı.
+	if _, port, ok := kurArgleri([]string{"--baska", "--yazici-kur", "Kasa", "USB002"}); !ok || port != "USB002" {
+		t.Fatal("bayrak ikinci konumda bulunamadı")
+	}
+	// Eksik argüman → asla tamam değil (yükseltilmiş süreç yanlış anlamayla çalışmamalı).
+	for _, args := range [][]string{
+		{"--yazici-kur"},
+		{"--yazici-kur", "Kasa"},
+		{},
+		{"--kaldir-sunucu"},
+	} {
+		if _, _, ok := kurArgleri(args); ok {
+			t.Errorf("tamam=false beklenirdi: %v", args)
+		}
+	}
+}

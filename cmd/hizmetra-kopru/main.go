@@ -66,6 +66,24 @@ func main() {
 		os.Exit(0)
 	}
 
+	// "--yazici-kur <ad> <port>": ana süreç UAC ile başlattığı YÜKSELTİLMİŞ
+	// kopyadır (bkz. yazdir.yukseltilmisKur). Tek işi sürücüyü etkinleştirip
+	// kuyruğu açmak; tepsi/pencere/tek-kopya kilidi HİÇ devreye girmez —
+	// aksi halde çalışan ana kopyayla kilit yarışına girerdi. Sonuç ortak
+	// günlüğe yazılır (O_APPEND, iki sürecin aynı dosyaya eklemesi güvenli);
+	// ana süreç başarıyı kuyruğun BELİRMESİNDEN anlar.
+	if ad, port, tamam := kurArgleri(os.Args[1:]); tamam {
+		if d, err := ayar.Dizin(); err == nil {
+			gunluk.Baslat(d)
+		}
+		if err := yazdir.KurCocukSurec(ad, port); err != nil {
+			gunluk.Yaz("yükseltilmiş kurulum başarısız (%s @ %s): %v", ad, port, err)
+			os.Exit(1)
+		}
+		gunluk.Yaz("yükseltilmiş kurulum tamam: %s → %s", ad, port)
+		os.Exit(0)
+	}
+
 	dizin, err := ayar.Dizin()
 	if err != nil {
 		_ = zenity.Error("Ayar klasörü oluşturulamadı: "+err.Error(), zenity.Title("Hizmetra Yazıcı"))
@@ -811,6 +829,23 @@ func kurulabilirYazicilar() []durumsrv.KurulabilirYazici {
 		out = append(out, durumsrv.KurulabilirYazici{Ad: k.OnerilenAd, Port: k.Port, Donanim: k.Donanim})
 	}
 	return out
+}
+
+// kurArgleri — "--yazici-kur <ad> <port>" bayrağını ayıklar. Ad tırnaksız
+// gelir (Go, Windows komut satırındaki tırnakları çözmüş olur). Bayrak var ama
+// argümanları eksikse tamam=false: yükseltilmiş süreç yanlış anlamayla asla
+// çalışmamalı.
+func kurArgleri(args []string) (ad, port string, tamam bool) {
+	for i, a := range args {
+		if a != "--yazici-kur" {
+			continue
+		}
+		if len(args) < i+3 {
+			return "", "", false
+		}
+		return args[i+1], args[i+2], true
+	}
+	return "", "", false
 }
 
 // onarimEylemi — sorun koduna göre durum penceresindeki TEK düğme.

@@ -3,9 +3,14 @@
 package yazdir
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/godoes/printers"
@@ -70,12 +75,39 @@ type printerInfo2Yaz struct {
 // kurulumSurucuAdaylari — sırayla denenecek sürücüler. İlki her Windows'ta vardır.
 var kurulumSurucuAdaylari = []string{"Generic / Text Only", "Generic/Text Only"}
 
+// errKurYetkiYok — AddPrinterW yönetici yetkisi istedi (sentinel: yükseltilmiş
+// yeniden deneme bunu yakalar).
+var errKurYetkiYok = errors.New("yazıcı kurmak için yönetici yetkisi gerekiyor")
+
+// errSurucuYok — "Generic / Text Only" spooler'a hiç yüklenmemiş. Windows'un
+// İÇİNDE hazır durur (ntprint.inf) ama hiç yazıcı kurulmamış tertemiz bir
+// bilgisayarda etkin değildir. Saha: yepyeni PC'de Kur düğmesi bu yüzden
+// "sürücü bulunamadı" dedi (2026-09-22, v0.15.3).
+var errSurucuYok = errors.New(`Windows'un "Generic / Text Only" sürücüsü bu bilgisayarda bulunamadı`)
+
 // kurPlatform — port'a bakan yeni bir yazıcı kuyruğu açar.
+//
+// İKİ AŞAMALI: önce doğrudan dener (yönetici hesapta ve sürücü yüklüyse tek
+// çağrıda biter). Sürücü eksikse YA DA yetki yoksa kendi exe'sini "runas" ile
+// yükseltilmiş çalıştırır (--yazici-kur); Windows kullanıcıya BİR kez UAC
+// sorusu sorar, çocuk süreç sürücüyü etkinleştirip kuyruğu açar. Kafe sahibi
+// için toplam iş: Kur'a bas + Evet'e bas.
 func kurPlatform(ad, port string) error {
 	surucu, err := kurulumSurucusuSec()
-	if err != nil {
-		return err
+	if err == nil {
+		hata := kuyrukOlustur(ad, port, surucu)
+		if hata == nil {
+			return nil
+		}
+		if !errors.Is(hata, errKurYetkiYok) {
+			return hata // gerçek hata (port yok, ad çakışması…) — yükseltme çözmez
+		}
 	}
+	return yukseltilmisKur(ad, port)
+}
+
+// kuyrukOlustur — AddPrinterW ile kuyruğu açar. Sürücü adı çağırandan gelir.
+func kuyrukOlustur(ad, port, surucu string) error {
 
 	adU, err := windows.UTF16PtrFromString(ad)
 	if err != nil {
@@ -110,7 +142,7 @@ func kurPlatform(ad, port string) error {
 		case errUnknownPort:
 			return fmt.Errorf("%s girişi Windows'ta tanımlı değil — kabloyu çıkarıp yeniden takın", port)
 		case ERROR_ACCESS_DENIED:
-			return fmt.Errorf("yazıcı kurmak için yönetici yetkisi gerekiyor")
+			return errKurYetkiYok
 		default:
 			return fmt.Errorf("yazıcı kurulamadı: %w", errno)
 		}
@@ -137,7 +169,7 @@ func kurulumSurucusuSec() (string, error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("Windows'un \"Generic / Text Only\" sürücüsü bu bilgisayarda bulunamadı")
+	return "", errSurucuYok
 }
 
 // surucuAdlariniOku — EnumPrinterDriversW level 1 (yalnız ad). Yönetici gerekmez.
@@ -170,4 +202,92 @@ func surucuAdlariniOku() ([]string, error) {
 		out = append(out, windows.UTF16PtrToString(p))
 	}
 	return out, nil
+}
+
+// ── Yükseltilmiş kurulum (UAC) ──────────────────────────────────────────────
+
+// yukseltilmisKur — kendi exe'mizi "runas" ile başlatır; UAC sorusunu kullanıcı
+// onaylarsa çocuk süreç sürücüyü etkinleştirir + kuyruğu açar. Biz burada
+// kuyruğun BELİRMESİNİ gözleriz: ShellExecute bize çıkış kodu vermez ve
+// SHELLEXECUTEINFO/bekleme plumbing'i yerine gözlem hem basit hem kanıta dayalı.
+func yukseltilmisKur(ad, port string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("program yolu bulunamadı: %w", err)
+	}
+	fiil, _ := windows.UTF16PtrFromString("runas")
+	dosya, _ := windows.UTF16PtrFromString(exe)
+	arg, err := windows.UTF16PtrFromString(`--yazici-kur "` + ad + `" "` + port + `"`)
+	if err != nil {
+		return fmt.Errorf("yazıcı adı kullanılamaz: %w", err)
+	}
+	if err := windows.ShellExecute(0, fiil, dosya, arg, nil, windows.SW_HIDE); err != nil {
+		// En sık sebep: kullanıcı UAC penceresinde "Hayır" dedi.
+		return fmt.Errorf("Windows'un yönetici onayı penceresinde Evet'e basılması gerekiyor")
+	}
+	// Çocuk süreç çalışıyor; kuyruk belirene kadar bekle (sürücü etkinleştirme
+	// yavaş diskte 30-40 sn sürebiliyor).
+	for bekleme := 0; bekleme < 60; bekleme++ {
+		time.Sleep(2 * time.Second)
+		if kuyrukVarMi(ad) {
+			OnbellegiTemizle()
+			return nil
+		}
+	}
+	return fmt.Errorf("kurulum tamamlanamadı — yönetici onayı verildiyse günlükte ayrıntı vardır")
+}
+
+func kuyrukVarMi(ad string) bool {
+	adlar, err := printers.ReadNames()
+	if err != nil {
+		return false
+	}
+	for _, a := range adlar {
+		if strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(ad)) {
+			return true
+		}
+	}
+	return false
+}
+
+// kurCocukSurecPlatform — YÜKSELTİLMİŞ çocuk süreçte koşar (--yazici-kur).
+// Sürücü eksikse Windows'un kendi kurulum aracıyla (printui) ntprint.inf'ten
+// etkinleştirir, sonra kuyruğu açar.
+func kurCocukSurecPlatform(ad, port string) error {
+	surucu, err := kurulumSurucusuSec()
+	if err != nil {
+		if err := yerlesikSurucuyuKur(); err != nil {
+			return err
+		}
+		if surucu, err = kurulumSurucusuSec(); err != nil {
+			return fmt.Errorf("sürücü etkinleştirildi ama listede görünmedi: %w", err)
+		}
+	}
+	return kuyrukOlustur(ad, port, surucu)
+}
+
+// yerlesikSurucuyuKur — "Generic / Text Only"yi ntprint.inf'ten spooler'a yükler.
+//
+// printui.dll,PrintUIEntry /ia: Windows'un kendi, on yıllardır değişmeyen
+// sürücü kurulum yolu — DRIVER_INFO dosya-yolu plumbing'i yazmaktan hem kısa
+// hem savaşta test edilmiş. ntprint.inf Windows'un kutudan çıkan ana yazıcı
+// INF'idir; "Generic / Text Only" Microsoft'un kendi sürücüsü olarak hep içinde.
+func yerlesikSurucuyuKur() error {
+	windir := os.Getenv("SystemRoot")
+	if windir == "" {
+		windir = `C:\Windows`
+	}
+	ctx, iptal := context.WithTimeout(context.Background(), 90*time.Second)
+	defer iptal()
+	cmd := exec.CommandContext(ctx, "rundll32", "printui.dll,PrintUIEntry",
+		"/ia", "/m", "Generic / Text Only", "/f", windir+`\inf\ntprint.inf`)
+	cikti, err := cmd.CombinedOutput()
+	if err != nil {
+		m := strings.TrimSpace(string(cikti))
+		if m == "" {
+			return fmt.Errorf("yerleşik yazıcı sürücüsü etkinleştirilemedi: %w", err)
+		}
+		return fmt.Errorf("yerleşik yazıcı sürücüsü etkinleştirilemedi: %w (%s)", err, m)
+	}
+	return nil
 }
