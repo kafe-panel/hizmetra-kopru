@@ -549,7 +549,10 @@ function ciz(v) {
       return '<li><span class="y-nokta"></span><span class="y-ad">' + kacis(ad) + "</span></li>";
     }).join("");
   } else {
-    liste.innerHTML = '<li class="bos">Bu bilgisayarda yazıcı bulunamadı</li>';
+    // Boş durum EYLEM söyler: "bulunamadı" tek başına kafe sahibine hiçbir
+    // şey anlatmıyor — ne yapacağını yazıyoruz. Yazıcı takılıp açıldığında
+    // "Takılı bir yazıcı bulundu → Kur" kartı kendiliğinden belirir.
+    liste.innerHTML = '<li class="bos">Yazıcı görünmüyor — yazıcının fişini prize takın, güç düğmesini açın ve USB kablosunu bilgisayara bağlayın. Birkaç saniye içinde yukarıda "Kur" kartı belirecek.</li>';
   }
 
   // Fiş şeridi (günlük)

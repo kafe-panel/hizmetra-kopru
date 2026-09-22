@@ -243,16 +243,21 @@ func AdGecerliMi(ad string) bool {
 
 // Kurulabilirler — TAKILI ama Windows'ta kuyruğu olmayan yazıcıları döner.
 // Windows dışında her zaman boş döner (canlı port okuması yalnız orada var).
-func Kurulabilirler() []KurulabilirYazici {
+//
+// İkinci dönüş taramaGuvenilir: false ise tarama EKSİK kaldı ve öneriler bu
+// yüzden susturuldu — v0.15.2'de bu sessizce oluyordu ve GERÇEKTEN takılı
+// yazıcı için bile kart çıkmayınca sebebini görmenin hiçbir yolu yoktu.
+// Çağıran bunu günlüğe düşer ki destek tek bakışta anlasın.
+func Kurulabilirler() (liste []KurulabilirYazici, taramaGuvenilir bool) {
 	canli, tam := CanliUsbPortlari()
 	kurulu, err := YazicilariOku()
 	if err != nil {
 		// Kurulu kuyrukları okuyamadıysak ÖNERİ YAPMAYIZ: boş listeyle
 		// karşılaştırmak, var olan her kuyruğu "yok" sayıp ikinci bir kuyruk
 		// açmaya kalkmak demektir.
-		return nil
+		return nil, false
 	}
-	return KurulabilirleriBul(canli, tam, kurulu)
+	return KurulabilirleriBul(canli, tam, kurulu), tam
 }
 
 // Kur — verilen porta bakan yeni bir yazıcı kuyruğu açar.
