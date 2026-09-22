@@ -276,3 +276,18 @@ func Kur(ad, port string) error {
 	}
 	return kurPlatform(ad, port)
 }
+
+// KurCocukSurec — YÜKSELTİLMİŞ çocuk süreçten çağrılır (--yazici-kur bayrağı).
+// Kur ile aynı doğrulamadan geçer: yükseltilmiş süreç, doğrulanmamış girdiyle
+// çalıştırılabilecek en yanlış yerdir.
+func KurCocukSurec(ad, port string) error {
+	ad = strings.TrimSpace(ad)
+	port = strings.TrimSpace(port)
+	if !AdGecerliMi(ad) {
+		return errAdGecersiz
+	}
+	if port == "" {
+		return errPortBos
+	}
+	return kurCocukSurecPlatform(ad, port)
+}
