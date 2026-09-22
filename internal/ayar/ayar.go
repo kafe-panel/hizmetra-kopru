@@ -149,17 +149,37 @@ func (a *Ayar) SunucuAdresi() string {
 
 // SunucuAdaylari — eşleştirmede DENENECEK sunucular, öncelik sırasıyla:
 //   - env HIZMETRA_API varsa YALNIZ onu (açık geçersiz kılma),
-//   - kayıtlı SunucuURL varsa YALNIZ onu (zaten bir sunucuya eşleşmiş),
-//   - yoksa BilinenSunucular (production→staging otomatik keşif).
+//   - kayıtlı SunucuURL varsa ÖNCE o, ARDINDAN diğer bilinen sunucular,
+//   - kayıt yoksa BilinenSunucular (production→staging otomatik keşif).
 //
 // Eşleşme başarınca kazanan sunucu SunucuURL'e yazılır; sonraki tüm
 // nabız/işler tek sunucuya gider.
+//
+// KAYITLI SUNUCU NEDEN TEK ADAY DEĞİL (2026-09-22): eskiden kayıtlı adres
+// varsa YALNIZ o deneniyordu. "Yeniden Eşleştir" yalnız Token'ı siliyor,
+// SunucuURL'i SİLMİYOR — yani bir kez bir sunucuya eşleşmiş ajan o sunucuya
+// SONSUZA KADAR kilitleniyordu. Başka bir panelde üretilen kod girilince
+// kayıtlı sunucu onu tanımıyor, 404 dönüyor ve kullanıcı "kod geçersiz"
+// görüyordu — oysa kod GEÇERLİ, yalnızca başka sunucuda. Arayüzde bu
+// kilidi açacak hiçbir düğme yoktu; çıkış yolu ayar dosyasını elle
+// silmekti. Canlı vaka: staging'e eşleşmiş ajana production kodu girildi,
+// iki denemede de 404 (2026-09-22 16:50).
+//
+// Kayıtlı adres yine de İLK sırada: normal durumda tek istekle eşleşir ve
+// 6 hanelik kodun iki sunucuda çakışma ihtimalinde kendi sunucusu kazanır.
 func (a *Ayar) SunucuAdaylari() []string {
 	if v := os.Getenv("HIZMETRA_API"); v != "" {
 		return []string{v}
 	}
-	if a.SunucuURL != "" {
-		return []string{a.SunucuURL}
+	if a.SunucuURL == "" {
+		return BilinenSunucular
 	}
-	return BilinenSunucular
+	adaylar := make([]string, 0, len(BilinenSunucular)+1)
+	adaylar = append(adaylar, a.SunucuURL)
+	for _, s := range BilinenSunucular {
+		if s != a.SunucuURL {
+			adaylar = append(adaylar, s)
+		}
+	}
+	return adaylar
 }
