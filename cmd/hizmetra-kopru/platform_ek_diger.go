@@ -45,3 +45,9 @@ const uiTrayIcinde = false
 
 // dmgIcindenCalisiyor — macOS'a özgü (disk imajı) kontrol; Linux'ta anlamsız.
 func dmgIcindenCalisiyor() bool { return false }
+
+// dosyaAc — dosyayı masaüstü Linux'un varsayılan uygulamasında açar
+// ("Günlüğü Aç"). xdg-open yoksa hata döner ve çağıran günlüğe yazar.
+func dosyaAc(yol string) error {
+	return exec.Command("xdg-open", yol).Start()
+}

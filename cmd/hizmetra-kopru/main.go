@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -29,8 +30,10 @@ import (
 	"github.com/kafe-panel/hizmetra-kopru/internal/kesif"
 	"github.com/kafe-panel/hizmetra-kopru/internal/kopru"
 	"github.com/kafe-panel/hizmetra-kopru/internal/kurulum"
+	"github.com/kafe-panel/hizmetra-kopru/internal/onarim"
 	"github.com/kafe-panel/hizmetra-kopru/internal/pencere"
 	"github.com/kafe-panel/hizmetra-kopru/internal/surum"
+	"github.com/kafe-panel/hizmetra-kopru/internal/teshis"
 	"github.com/kafe-panel/hizmetra-kopru/internal/yazdir"
 )
 
@@ -158,6 +161,15 @@ func akisiBaslat() bool {
 
 	ajan = kopru.Yeni(istemci, yazdir.Bas, kesif.Bul, Surum, durum)
 	ajan.YetkisizGeldi = yenidenEslestir // token kalıcı geçersizse otomatik yeniden eşleştir
+	// ÇİFT BASKI KALKANI diske bağlanır: güncelleme/çökme sonrası yeniden
+	// başlayan ajan aynı fişi İKİNCİ KEZ basmasın (bkz. internal/kopru/kalkan.go).
+	if dizin, err := ayar.Dizin(); err == nil {
+		ajan.KalkanDosyasiAyarla(kopru.KalkanYolu(dizin))
+		// ONARIM DEFTERİ: ajanın yazıcı ayarlarında yaptığı her değişiklik
+		// buraya eski değeriyle yazılır ve geri alınabilir. Defter yoksa
+		// HİÇBİR onarım yapılmaz (bkz. internal/yazdir/onarim_ortak.go).
+		yazdir.DefterAyarla(onarim.Ac(dizin))
+	}
 	durum.Ayarla(func(d *kopru.Durum) { d.IsletmeAd = yapilandirma.IsletmeAd })
 
 	go ajan.NabizDongusu(dur)
@@ -476,6 +488,7 @@ func trayHazir() {
 	mGoster := systray.AddMenuItem("Uygulamayı Aç", "Hizmetra Yazıcı arayüzünü açar — bağlantı, yazıcılar ve fiş günlüğü")
 	mPanel := systray.AddMenuItem("Yönetim Panelini Aç", "Hizmetra yönetim panelini tarayıcıda açar")
 	mYeniden := systray.AddMenuItem("Yeniden Eşleştir (kod gir)", "Farklı bir hesaba/kafeye bağlan — yeni 6 haneli kurulum kodu girer")
+	mGunluk := systray.AddMenuItem("Günlüğü Aç", "Fiş günlüğü dosyasını açar — destek isterken bu dosyayı gönderin")
 	systray.AddSeparator()
 	mCikis := systray.AddMenuItem("Çıkış", "Programı kapat (fişler basılmaz!)")
 
@@ -483,19 +496,7 @@ func trayHazir() {
 	go func() {
 		for {
 			d := durum.Oku()
-			metin := "Bağlantı bekleniyor…"
-			switch {
-			case d.SonHata != "" && !d.Bagli:
-				metin = "⚠ " + kisalt(d.SonHata, 60)
-			case d.Bagli && !d.SonBaski.IsZero():
-				metin = fmt.Sprintf("✓ Bağlı — son fiş %s", d.SonBaski.Format("15:04"))
-			case d.Bagli:
-				metin = fmt.Sprintf("✓ Bağlı (%d yazıcı)", d.YaziciSayi)
-			}
-			if d.IsletmeAd != "" {
-				metin = d.IsletmeAd + " · " + metin
-			}
-			mDurum.SetTitle(metin)
+			mDurum.SetTitle(tepsiDurumMetni(&d))
 			select {
 			case <-dur:
 				return
@@ -514,7 +515,19 @@ func trayHazir() {
 			case <-mYeniden.ClickedCh:
 				// Ayrı goroutine: zenity onay diyaloğu menü döngüsünü bloklamasın.
 				go kullaniciYenidenEslestir()
+			case <-mGunluk.ClickedCh:
+				go gunluguAc()
 			case <-mCikis.ClickedCh:
+				// ONAY: kafede yanlış tıklama sessizce fişleri durdurmasın.
+				// Ayrı goroutine DEĞİL: onay gelmeden menü döngüsü devam etmemeli.
+				if zenity.Question(
+					"Çıkarsanız fişler basılmaz. Emin misiniz?",
+					zenity.Title("Hizmetra Yazıcı — Çıkış"),
+					zenity.OKLabel("Çık"),
+					zenity.CancelLabel("Vazgeç"),
+				) != nil {
+					continue
+				}
 				systray.Quit()
 				return
 			case <-dur:
@@ -522,6 +535,32 @@ func trayHazir() {
 			}
 		}
 	}()
+}
+
+// tepsiDurumMetni — tepsi menüsündeki tek satırlık durum metni (SAF fonksiyon,
+// platform_windows_test.go'da macOS'ta da koşan testi var).
+//
+// EN BAŞTA baskı sorunu dalı gelir: BASKI HATASINDA BAĞLANTI SAĞLAMDIR, yani
+// d.Bagli true kalır ve eski "SonHata != ” && !d.Bagli" dalı HİÇ çalışmazdı.
+// Kullanıcı fiş çıkmazken "✓ Bağlı — son fiş 14:32" görüyordu.
+// NOT: POINTER alır — kopru.Durum bir sync.Mutex taşır ve değerle kopyalamak
+// `go vet` copylocks uyarısı verir (Oku() zaten güvenli bir kopya döndürür).
+func tepsiDurumMetni(d *kopru.Durum) string {
+	metin := "Bağlantı bekleniyor…"
+	switch {
+	case d.SonBaskiSorunu != "":
+		metin = "⚠ Fiş basılamıyor — " + kisalt(d.SonBaskiSorunu, 50)
+	case d.SonHata != "" && !d.Bagli:
+		metin = "⚠ " + kisalt(d.SonHata, 60)
+	case d.Bagli && !d.SonBaski.IsZero():
+		metin = fmt.Sprintf("✓ Bağlı — son fiş %s", d.SonBaski.Format("15:04"))
+	case d.Bagli:
+		metin = fmt.Sprintf("✓ Bağlı (%d yazıcı)", d.YaziciSayi)
+	}
+	if d.IsletmeAd != "" {
+		metin = d.IsletmeAd + " · " + metin
+	}
+	return metin
 }
 
 func trayBitti() {
@@ -572,6 +611,45 @@ func durumPenceresiniAc() {
 	}
 }
 
+// gunluguAc — günlük dosyasını işletim sisteminin varsayılan uygulamasında
+// açar. gunluk.Yolu() ARTIK ÇAĞRILIYOR (eskiden hiçbir yerden kullanılmıyordu).
+func gunluguAc() {
+	yol := gunluk.Yolu()
+	if yol == "" {
+		return
+	}
+	if err := dosyaAc(yol); err != nil {
+		gunluk.Yaz("günlük dosyası açılamadı: %v", err)
+	}
+}
+
+// bekleyenSorunuOnar — durum penceresindeki "Onar" düğmesi (POST /onar).
+// Hangi yazıcıya uygulanacağını SonBaskiHedef söyler; onarım GERİ ALINABİLİR
+// ve deftere yazılır (bkz. internal/onarim).
+func bekleyenSorunuOnar() {
+	d := durum.Oku()
+	if d.SonBaskiKodu == "" || d.SonBaskiHedef == "" {
+		return
+	}
+	sonuc := yazdir.Onar(d.SonBaskiHedef, teshis.Kod(d.SonBaskiKodu))
+	gunluk.Yaz("onarım isteği: '%s' / %s → %s", d.SonBaskiHedef, d.SonBaskiKodu, sonuc.Aciklama)
+}
+
+// sonOnarimiGeriAl — "Geri Al" düğmesi (POST /geri-al).
+func sonOnarimiGeriAl() {
+	defter := yazdir.Defter()
+	if defter == nil {
+		return
+	}
+	kayit, varmi := defter.Sonuncu()
+	if !varmi {
+		return
+	}
+	if !yazdir.OnarimiGeriAl(kayit.ID) {
+		gunluk.Yaz("son onarım geri alınamadı (kayıt #%d)", kayit.ID)
+	}
+}
+
 func kisalt(s string, n int) string {
 	r := []rune(s)
 	if len(r) <= n {
@@ -594,6 +672,9 @@ func baslatDurumSunucusu() {
 	// "Yeniden Eşleştir" butonu (sayfa.html) confirm()'i sayfada aldığı için
 	// çekirdeği DOĞRUDAN çağırır (tray yolu ayrıca zenity onayı gösterir).
 	s.YenidenEslestirAyarla(func() { yenidenEslestirGovde("durum penceresinden yeniden eşleştir") })
+	s.OnarAyarla(bekleyenSorunuOnar)
+	s.GeriAlAyarla(sonOnarimiGeriAl)
+	s.GunlukAcAyarla(gunluguAc)
 	u, port, err := s.Baslat()
 	if err != nil {
 		gunluk.Yaz("durum penceresi başlatılamadı: %v", err)
@@ -661,11 +742,14 @@ func digerKopyayaOdaklanDene() {
 // ozetTopla — durum penceresinin gösterdiği anlık özeti globallerden derler.
 func ozetTopla() durumsrv.Ozet {
 	d := durum.Oku()
+	// PAYLAŞIMLI ÖNBELLEK: eskiden burada kesif.Bul() çağrılıyordu ve durum
+	// penceresi 3 saniyede bir sistemin TÜM yazıcılarını yeniden tarıyordu.
 	var yaziciAdlari []string
-	if yzc, err := kesif.Bul(); err == nil {
-		for _, y := range yzc {
-			yaziciAdlari = append(yaziciAdlari, y.Ad)
+	if yzc, err := yazdir.YazicilariOku(); err == nil {
+		for ad := range yzc {
+			yaziciAdlari = append(yaziciAdlari, ad)
 		}
+		sort.Strings(yaziciAdlari)
 	}
 	sonBaski := ""
 	if !d.SonBaski.IsZero() {
@@ -682,7 +766,56 @@ func ozetTopla() durumsrv.Ozet {
 		SonBaski:    sonBaski,
 		GuncelSurum: d.GuncelSurum,
 		IndirmeURL:  d.IndirmeURL,
+
+		BaskiSorunu:  d.SonBaskiSorunu,
+		BaskiKodu:    d.SonBaskiKodu,
+		OnarimEylemi: onarimEylemi(&d),
+		EylemID:      eylemKimligi(&d),
+		SonOnarim:    sonOnarimMetni(),
+		GeriAlKod:    geriAlKodu(),
+		GunlukYol:    gunluk.Yolu(),
 	}
+}
+
+// onarimEylemi — sorun koduna göre durum penceresindeki TEK düğme.
+func onarimEylemi(d *kopru.Durum) string {
+	if d.SonBaskiKodu == "" {
+		return ""
+	}
+	return teshis.BulguAl(teshis.Kod(d.SonBaskiKodu), d.SonBaskiHedef, "").Eylem
+}
+
+// eylemKimligi — /onar isteğinin doğrulandığı kimlik. Sorun değişince kimlik de
+// değişir; açık kalmış eski bir sekme geçmiş bir sorunu onaramaz.
+func eylemKimligi(d *kopru.Durum) string {
+	if d.SonBaskiKodu == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s|%s|%d", d.SonBaskiKodu, d.SonBaskiHedef, d.SonBaskiSorunuAt.Unix())
+}
+
+func sonOnarimMetni() string {
+	defter := yazdir.Defter()
+	if defter == nil {
+		return ""
+	}
+	k, varmi := defter.Sonuncu()
+	if !varmi {
+		return ""
+	}
+	return fmt.Sprintf("%s · %s — %s", k.Zaman.Format("15:04"), k.Hedef, k.Islem)
+}
+
+func geriAlKodu() string {
+	defter := yazdir.Defter()
+	if defter == nil {
+		return ""
+	}
+	k, varmi := defter.Sonuncu()
+	if !varmi {
+		return ""
+	}
+	return fmt.Sprint(k.ID)
 }
 
 // sonIsSatirlari — bellekteki günlükten baskı işi satırlarını süzer (fiş özeti).

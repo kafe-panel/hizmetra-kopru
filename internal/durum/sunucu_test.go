@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -358,5 +359,153 @@ func TestBaslatPortDondurur(t *testing.T) {
 	beklenenParca := fmt.Sprintf(":%d/?t=", port)
 	if !strings.Contains(url, beklenenParca) {
 		t.Fatalf("dönen URL %q port %d ile tutarsız", url, port)
+	}
+}
+
+// ── Sorun şeridi uçları (2026-09-22) ────────────────────────────────────────
+
+func sorunluSunucu(eylemID string, tetiklendi *bool) *Sunucu {
+	s := Yeni("Test", "0.0.0", func() Ozet {
+		return Ozet{Bagli: true, BaskiSorunu: "Kağıt bitti.", BaskiKodu: "KAGIT_YOK",
+			OnarimEylemi: "ONAR", EylemID: eylemID}
+	}, func(int) []string { return nil }, nil, nil)
+	s.OnarAyarla(func() { *tetiklendi = true })
+	return s
+}
+
+// TestOnarTokensizReddedilir — /guncelle ile AYNI güvenlik deseni.
+func TestOnarTokensizReddedilir(t *testing.T) {
+	tetik := false
+	s := sorunluSunucu("E1", &tetik)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/onar", strings.NewReader(`{"eylem_id":"E1"}`)))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("token'sız /onar reddedilmeliydi, durum %d", w.Code)
+	}
+	if tetik {
+		t.Fatal("token'sız istek callback'i TETİKLEMEMELİ")
+	}
+}
+
+// TestOnarGETReddedilir — yalnız POST.
+func TestOnarGetReddedilir(t *testing.T) {
+	tetik := false
+	s := sorunluSunucu("E1", &tetik)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/onar?t="+s.Token, nil))
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET reddedilmeliydi, durum %d", w.Code)
+	}
+	if tetik {
+		t.Fatal("GET callback'i TETİKLEMEMELİ")
+	}
+}
+
+// TestOnarYanlisEylemIDTetiklemez — açık kalmış eski bir sekme, çoktan geçmiş
+// bir sorunu "onaramaz".
+func TestOnarYanlisEylemIDTetiklemez(t *testing.T) {
+	tetik := false
+	s := sorunluSunucu("YENI", &tetik)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/onar?t="+s.Token,
+		strings.NewReader(`{"eylem_id":"ESKI"}`)))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("eski eylem_id çakışma dönmeliydi, durum %d", w.Code)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if tetik {
+		t.Fatal("yanlış eylem_id ile callback TETİKLENMEMELİ")
+	}
+}
+
+// TestOnarDogruEylemIDTetikler.
+func TestOnarDogruEylemIDTetikler(t *testing.T) {
+	var kilit sync.Mutex
+	tetik := false
+	s := Yeni("Test", "0.0.0", func() Ozet {
+		return Ozet{BaskiSorunu: "x", BaskiKodu: "KAGIT_YOK", EylemID: "E9"}
+	}, func(int) []string { return nil }, nil, nil)
+	s.OnarAyarla(func() { kilit.Lock(); tetik = true; kilit.Unlock() })
+
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/onar?t="+s.Token,
+		strings.NewReader(`{"eylem_id":"E9"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("doğru eylem_id 200 dönmeliydi, durum %d", w.Code)
+	}
+	for i := 0; i < 100; i++ {
+		kilit.Lock()
+		oldu := tetik
+		kilit.Unlock()
+		if oldu {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("callback tetiklenmedi")
+}
+
+// TestGunlukAcUcu — token + POST + callback.
+func TestGunlukAcUcu(t *testing.T) {
+	var kilit sync.Mutex
+	tetik := false
+	s := Yeni("Test", "0.0.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil, nil)
+	s.GunlukAcAyarla(func() { kilit.Lock(); tetik = true; kilit.Unlock() })
+
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/gunluk-ac", nil))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("token'sız /gunluk-ac reddedilmeliydi, durum %d", w.Code)
+	}
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/gunluk-ac?t="+s.Token, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("200 bekleniyordu, durum %d", w.Code)
+	}
+	for i := 0; i < 100; i++ {
+		kilit.Lock()
+		oldu := tetik
+		kilit.Unlock()
+		if oldu {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("günlük açma callback'i tetiklenmedi")
+}
+
+// TestGeriAlUcu — token'sız reddedilir, GET reddedilir.
+func TestGeriAlUcu(t *testing.T) {
+	s := Yeni("Test", "0.0.0", func() Ozet { return Ozet{} }, func(int) []string { return nil }, nil, nil)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/geri-al", nil))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("token'sız /geri-al reddedilmeliydi, durum %d", w.Code)
+	}
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/geri-al?t="+s.Token, nil))
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET reddedilmeliydi, durum %d", w.Code)
+	}
+}
+
+// TestVeriJsonYeniAlanlariTasir — sayfa sorun şeridini bu alanlardan çizer.
+func TestVeriJsonYeniAlanlariTasir(t *testing.T) {
+	s := Yeni("Test", "0.0.0", func() Ozet {
+		return Ozet{BaskiSorunu: "Kağıt bitti.", BaskiKodu: "KAGIT_YOK",
+			OnarimEylemi: "ONAR", EylemID: "E1", SonOnarim: "14:32 · Mutfak — x",
+			GeriAlKod: "3", GunlukYol: "/tmp/kopru.log"}
+	}, func(int) []string { return nil }, nil, nil)
+
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/veri.json?t="+s.Token, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("durum %d", w.Code)
+	}
+	govde := w.Body.String()
+	for _, anahtar := range []string{"baski_sorunu", "baski_kodu", "onarim_eylemi", "eylem_id", "son_onarim", "geri_al_kod", "gunluk_yolu"} {
+		if !strings.Contains(govde, anahtar) {
+			t.Errorf("%q anahtarı /veri.json'da yok", anahtar)
+		}
 	}
 }

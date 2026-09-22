@@ -37,11 +37,21 @@ var ErrKodGecersiz = errors.New("kopru: kurulum kodu geçersiz")
 var ErrGecici = errors.New("kopru: geçici ağ-geçidi hatası (502/503/504)")
 
 // Yazici — ajanın bulduğu bir yazıcı (nabızla sunucuya bildirilir).
+//
+// PROTOKOL DONMUŞ: ilk dört alanın ADI, TİPİ ve ANLAMI DEĞİŞTİRİLEMEZ; Durum
+// hâlâ YALNIZ "online" | "offline" değerlerini alır. Yeni alanlar omitempty'dir,
+// yani boşken üretilen JSON eski şemayla BİREBİR aynıdır ve eski sunucu
+// etkilenmez (sunucu nabız gövdesindeki bilinmeyen anahtarları zaten süzüyor).
 type Yazici struct {
 	Ad    string `json:"ad"`
 	Hedef string `json:"hedef"` // Windows yazıcı adı VEYA "ip:port"
 	Tip   string `json:"tip"`   // "windows" | "ag"
 	Durum string `json:"durum"` // "online" | "offline"
+
+	// EKLEME (2026-09-22) — teşhis zenginleştirme; hiçbiri ZORUNLU DEĞİL.
+	Port   string `json:"port,omitempty"`   // "USB001" / "FILE:" / "IP_192.168.1.50"
+	Surucu string `json:"surucu,omitempty"` // sürücü adı (biliniyorsa)
+	Uyari  string `json:"uyari,omitempty"`  // tek cümlelik Türkçe uyarı
 }
 
 // Is — sunucudan çekilen bir baskı işi.
@@ -53,10 +63,15 @@ type Is struct {
 }
 
 // Sonuc — bir işin baskı sonucu.
+//
+// KRİTİK TEŞHİS ASLA YALNIZ HataKodu'na KONMAZ: kullanıcıya gösterilecek tek
+// cümle HER ZAMAN mevcut `hata` alanındadır. HataKodu yalnız makine tarafı için
+// EK bilgidir (eski sunucu onu görmezden gelir, davranış değişmez).
 type Sonuc struct {
-	IsID  int64  `json:"is_id"`
-	Durum string `json:"durum"` // "basildi" | "hata"
-	Hata  string `json:"hata,omitempty"`
+	IsID     int64  `json:"is_id"`
+	Durum    string `json:"durum"` // "basildi" | "hata"
+	Hata     string `json:"hata,omitempty"`
+	HataKodu string `json:"hata_kodu,omitempty"`
 }
 
 // Client — protokol istemcisi. Token boşsa yalnız Eslestir çağrılabilir.

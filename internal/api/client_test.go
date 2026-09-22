@@ -292,3 +292,44 @@ func TestIndirmeURLIcin(t *testing.T) {
 		t.Errorf("legacy'de linux BOŞ dönmeli, geldi %q", g)
 	}
 }
+
+// TestYeniAlanlarEskiSemayiBOZMAZ — PROTOKOL DONMUŞ. Yeni alanlar (hata_kodu /
+// port / surucu / uyari) BOŞKEN üretilen JSON, eski şemayla BİREBİR aynı
+// olmalı; aksi halde bu ajan eski bir sunucuya bağlandığında nabız/sonuç
+// gövdesi tanınmaz.
+func TestYeniAlanlarEskiSemayiBozmaz(t *testing.T) {
+	ham, err := json.Marshal(Sonuc{IsID: 7, Durum: "basildi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(ham) != `{"is_id":7,"durum":"basildi"}` {
+		t.Fatalf("Sonuc şeması değişmiş: %s", ham)
+	}
+	ham, err = json.Marshal(Sonuc{IsID: 7, Durum: "hata", Hata: "Kağıt bitti."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(ham) != `{"is_id":7,"durum":"hata","hata":"Kağıt bitti."}` {
+		t.Fatalf("Sonuc şeması değişmiş: %s", ham)
+	}
+	ham, err = json.Marshal(Yazici{Ad: "ZJ-80", Hedef: "ZJ-80", Tip: "windows", Durum: "online"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(ham) != `{"ad":"ZJ-80","hedef":"ZJ-80","tip":"windows","durum":"online"}` {
+		t.Fatalf("Yazici şeması değişmiş: %s", ham)
+	}
+}
+
+// TestYeniAlanlarDoluykenEklenir — dolu olduklarında da eski dört alanın adı ve
+// sırası KORUNUR; yenileri yalnız EKLENİR.
+func TestYeniAlanlarDoluykenEklenir(t *testing.T) {
+	ham, _ := json.Marshal(Sonuc{IsID: 1, Durum: "hata", Hata: "x", HataKodu: "KAGIT_YOK"})
+	if string(ham) != `{"is_id":1,"durum":"hata","hata":"x","hata_kodu":"KAGIT_YOK"}` {
+		t.Fatalf("beklenmeyen JSON: %s", ham)
+	}
+	ham, _ = json.Marshal(Yazici{Ad: "a", Hedef: "a", Tip: "windows", Durum: "offline", Port: "USB001", Uyari: "u"})
+	if string(ham) != `{"ad":"a","hedef":"a","tip":"windows","durum":"offline","port":"USB001","uyari":"u"}` {
+		t.Fatalf("beklenmeyen JSON: %s", ham)
+	}
+}
