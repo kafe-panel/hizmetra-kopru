@@ -31,6 +31,12 @@ type Ayar struct {
 	// sessizce çıkar — bu nadir kenar durum için yeniden deneme YOKTUR.
 	SonBilinenPort  int    `json:"son_bilinen_port,omitempty"`
 	SonBilinenToken string `json:"son_bilinen_token,omitempty"`
+	// YerelAnahtar/YerelKokenler — çevrimdışı fiş (v0.17.0). Sunucu nabız cevabında
+	// verir; DİSKE yazılır ki internet yokken (ajan yeniden başlasa bile) panelin
+	// 127.0.0.1'e gönderdiği fiş doğrulanabilsin. Yalnız bu bilgisayarın yazıcısına
+	// baskı yetkisi taşır; yeniden eşleşmede sunucu tarafında değişir.
+	YerelAnahtar  string   `json:"yerel_anahtar,omitempty"`
+	YerelKokenler []string `json:"yerel_kokenler,omitempty"`
 	// NOT: v0.7.0-0.7.3'teki SonGosterilenSurum alanı v0.7.4'te KALDIRILDI —
 	// arayüz görünürlüğü artık "--autostart" bayrağıyla belirleniyor (login'de
 	// sessiz, elle açılışta pencere; bkz. main.go). Eski config.json'daki

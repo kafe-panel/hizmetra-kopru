@@ -35,6 +35,7 @@ import (
 	"github.com/kafe-panel/hizmetra-kopru/internal/surum"
 	"github.com/kafe-panel/hizmetra-kopru/internal/teshis"
 	"github.com/kafe-panel/hizmetra-kopru/internal/yazdir"
+	"github.com/kafe-panel/hizmetra-kopru/internal/yerel"
 )
 
 // Surum — derleme sırasında -ldflags "-X main.Surum=..." ile doldurulur.
@@ -189,6 +190,7 @@ func akisiBaslat() bool {
 		yazdir.DefterAyarla(onarim.Ac(dizin))
 	}
 	durum.Ayarla(func(d *kopru.Durum) { d.IsletmeAd = yapilandirma.IsletmeAd })
+	yerelFisUcunuBaslat()
 
 	go ajan.NabizDongusu(dur)
 	go ajan.IsDongusu(dur)
@@ -916,4 +918,36 @@ func panodanKodOner() string {
 		return s
 	}
 	return ""
+}
+
+// yerelFisUcunuBaslat — ÇEVRİMDIŞI FİŞ (v0.17.0): internet kesilince panel fişi
+// 127.0.0.1:yerel.YerelPort'a gönderir. Anahtar/kökenler diskteki son değerle
+// başlar (internet yokken ajan yeniden başlasa da çalışsın), her nabızda tazelenir.
+func yerelFisUcunuBaslat() {
+	ys := yerel.Yeni(Surum, ajan.BasZamanAsimiyla)
+	ys.HedefGecerli = func(hedef string) bool {
+		yzc, err := yazdir.YazicilariOku()
+		if err != nil {
+			return false
+		}
+		_, var_ := yzc[hedef]
+		return var_
+	}
+	ys.YetkiAyarla(yapilandirma.YerelAnahtar, yapilandirma.YerelKokenler)
+	ajan.YerelGeldi = func(y api.YerelBilgi) {
+		ys.YetkiAyarla(y.Anahtar, y.Kokenler)
+		if y.Anahtar == yapilandirma.YerelAnahtar && strings.Join(y.Kokenler, ",") == strings.Join(yapilandirma.YerelKokenler, ",") {
+			return
+		}
+		yapilandirma.YerelAnahtar = y.Anahtar
+		yapilandirma.YerelKokenler = y.Kokenler
+		if err := ayar.Kaydet(yapilandirma); err != nil {
+			gunluk.Yaz("yerel fiş anahtarı kaydedilemedi: %v", err)
+		}
+	}
+	if err := ys.Baslat(); err != nil {
+		gunluk.Yaz("yerel fiş ucu açılamadı (internetsiz fiş çalışmaz): %v", err)
+		return
+	}
+	gunluk.Yaz("yerel fiş ucu hazır: 127.0.0.1:%d", yerel.YerelPort)
 }

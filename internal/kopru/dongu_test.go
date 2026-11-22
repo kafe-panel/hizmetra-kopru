@@ -263,3 +263,22 @@ func TestYetkisizYenidenEslestirEsigi(t *testing.T) {
 		t.Fatalf("sıfırlama sonrası ikinci ardışık 401 yeniden tetiklemeliydi, tetik=%d", tetik)
 	}
 }
+
+func TestNabizYerelAnahtariIletir(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		zarfYaz(w, 200, true, map[string]any{"ok": true, "poll_sn": 25, "bekle_sn": 25,
+			"yerel": map[string]any{"anahtar": "abc", "kokenler": []string{"https://panel.hizmetra.com"}}})
+	}))
+	defer srv.Close()
+
+	istemci := api.New(srv.URL)
+	istemci.Token = "k1-0-x"
+	ajan := Yeni(istemci, func(string, []byte) error { return nil },
+		func() ([]api.Yazici, error) { return nil, nil }, "test", &Durum{})
+	var gelen api.YerelBilgi
+	ajan.YerelGeldi = func(y api.YerelBilgi) { gelen = y }
+	ajan.nabizAt()
+	if gelen.Anahtar != "abc" || len(gelen.Kokenler) != 1 {
+		t.Fatalf("yerel bilgi iletilmedi: %+v", gelen)
+	}
+}
