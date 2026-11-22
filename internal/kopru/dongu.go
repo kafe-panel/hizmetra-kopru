@@ -114,6 +114,9 @@ type Ajan struct {
 	// davranış: yalnız "Eşleştirme geçersiz" gösterilir (çıkmaz). Bu, emre'nin
 	// 2026-08-17 yaşadığı "cihaz silindi, kod girecek yer yok" bug'ının çözümü.
 	YetkisizGeldi func()
+	// YerelGeldi — nabız cevabı yerel fiş anahtarı taşıyınca çağrılır (main: diske
+	// yazar + yerel sunucuyu tazeler). nil ise yok sayılır.
+	YerelGeldi    func(api.YerelBilgi)
 	yetkisizSayac int
 	yetkisizKilit sync.Mutex
 }
@@ -258,6 +261,9 @@ func (a *Ajan) nabizAt() {
 	}
 	a.direktifAyarla(bekle, cevap.PollSn)
 	a.yetkisizSifirla() // başarılı nabız → 401 sayacı sıfırlanır
+	if cevap.Yerel != nil && cevap.Yerel.Anahtar != "" && a.YerelGeldi != nil {
+		a.YerelGeldi(*cevap.Yerel)
+	}
 	a.Durum.Ayarla(func(d *Durum) {
 		d.Bagli = true
 		d.SonHata = ""
@@ -368,6 +374,11 @@ var partiButcesiTest = 150 * time.Second
 // Süre dolunca goroutine arkada kalmaya devam eder — ama iş döngüsü kurtulur;
 // nabız zaten ayrı goroutine'de olduğu için eskiden panel YEŞİL kalıp fiş hiç
 // basılmıyordu.
+// BasZamanAsimiyla — yerel fiş ucunun (internal/yerel) da kullandığı süre sınırlı baskı.
+func (a *Ajan) BasZamanAsimiyla(hedef string, veri []byte) error {
+	return a.basZamanAsimiyla(hedef, veri)
+}
+
 func (a *Ajan) basZamanAsimiyla(hedef string, veri []byte) error {
 	// Bas ALANI goroutine'e GİRMEDEN yerele kopyalanır: zaman aşımında goroutine
 	// arkada kalmaya devam ettiği için, alan sonradan değişirse (testte sahte

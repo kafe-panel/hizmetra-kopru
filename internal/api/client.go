@@ -206,6 +206,16 @@ type NabizCevap struct {
 	OK      bool `json:"ok"`
 	PollSn  int  `json:"poll_sn"`
 	BekleSn *int `json:"bekle_sn,omitempty"` // opsiyonel; yoksa PollSn kullanılır
+	// Yerel — çevrimdışı fiş (v0.17.0): panelin internetsizken 127.0.0.1'deki yerel
+	// uca fiş gönderirken taşıdığı anahtar + izinli panel kökenleri. Eski sunucu
+	// göndermezse nil kalır (yerel uç kapalı kalır).
+	Yerel *YerelBilgi `json:"yerel,omitempty"`
+}
+
+// YerelBilgi — yerel fiş ucunun yetki bilgisi (sunucu cihaz token'ından türetir).
+type YerelBilgi struct {
+	Anahtar  string   `json:"anahtar"`
+	Kokenler []string `json:"kokenler"`
 }
 
 // Nabiz — "hayattayım" + gördüğüm yazıcılar. son_gorulme_at'i tazeler.
